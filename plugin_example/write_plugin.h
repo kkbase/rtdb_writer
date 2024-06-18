@@ -19,12 +19,12 @@ typedef struct _Analog_ {
     float fai;      // FAI, 4Byte
     bool ms;        // MS, 1Byte
     char tew;       // TEW, 1Byte
-    uint16_t cst;   // CST, 1Byte
+    uint16_t cst;   // CST, 2Byte
 } Analog;
 
 // 数字量结构
 typedef struct _Digital_ {
-    int32_t pnum;       // P_NUM, 4Byte
+    int32_t p_num;       // P_NUM, 4Byte
     bool dv;            // DV, 1Byte
     bool dvr;           // DVR, 1Byte
     bool q;             // Q, 1Byte

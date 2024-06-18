@@ -2,17 +2,21 @@ CC := gcc
 CFLAGS := -fPIC
 LDFLAGS := -shared
 TARGET := libplugin
+GO := go
 
 # Detect the operating system
 ifeq ($(OS),Windows_NT)
-    TARGET := plugin.dll
+    C_TARGET := cwrite_plugin.dll
+    GO_TARGET := gowrite_plugin.dll
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
-        TARGET := libplugin.so
+        C_TARGET := libcwrite_plugin.so
+        GO_TARGET := libgowrite_plugin.so
     endif
     ifeq ($(UNAME_S),Darwin)
-        TARGET := libplugin.dylib
+        TARGET := libcwrite_plugin.dylib
+        GO_TARGET := libgowrite_plugin.dylib
     endif
 endif
 
@@ -20,10 +24,13 @@ endif
 SRC := write_plugin.c
 
 # Default target
-all: $(TARGET)
+all: $(GO_TARGET)
+
+$(GO_TARGET): $(C_TARGET)
+	$(GO) build -buildmode=plugin -o $(GO_TARGET) write_plugin.go
 
 # Build target for shared library
-$(TARGET): $(SRC)
+$(C_TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 # Clean target

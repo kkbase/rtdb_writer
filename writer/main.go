@@ -6,8 +6,10 @@ import "C"
 import (
 	"bufio"
 	"encoding/csv"
+	"fmt"
 	"log"
 	"os"
+	"plugin"
 	"strconv"
 	"strings"
 	"sync"
@@ -355,7 +357,7 @@ func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalog
 	wg.Wait()
 }
 
-func main() {
+func main2() {
 	wdDir, err := os.Getwd()
 	if err != nil {
 		panic("get word dir err")
@@ -365,4 +367,19 @@ func main() {
 	normalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
 	normalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
 	FastWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+}
+
+func main() {
+	plug, err := plugin.Open("/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libgowrite_plugin.dylib")
+	if err != nil {
+		panic("open plugin err: " + err.Error())
+	}
+
+	loginSym, err := plug.Lookup("Login")
+	if err != nil {
+		panic(fmt.Sprintln("plugin lookup login err:", err))
+	}
+	loginSym.(func())()
+
+	fmt.Println("123")
 }
