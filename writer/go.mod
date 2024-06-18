@@ -1,3 +1,3 @@
-module github.com/kkbase/rtdb_writer
+module writer
 
 go 1.21.4
