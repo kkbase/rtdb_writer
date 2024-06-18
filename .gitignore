@@ -1,2 +1,6 @@
 .idea/
 .DS_Store
+
+**/libplugin.dylib
+**/libplugin.so
+**/plugin.dll
