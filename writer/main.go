@@ -4,7 +4,11 @@ package main
 // #include "write_plugin.h"
 import "C"
 import (
+	"bufio"
+	"encoding/csv"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 )
 
@@ -27,28 +31,100 @@ type StaticDigitalSection struct {
 }
 
 // ReadAnalogCsv 读取CSV文件, 将其转换成 C.Analog 结构后发送到缓存队列
-func ReadAnalogCsv(filename string, ch chan []AnalogSection, wg *sync.WaitGroup) {
+func ReadAnalogCsv(filepath string, ch chan []AnalogSection, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
+
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
+	// CSV读取器
+	reader := csv.NewReader(bufio.NewReader(file))
+
+	// 按行读取
+	for {
+		// 读取一行, 判断是否为EOF
+		_, err := reader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			} else {
+			}
+			log.Printf("Error reading record: %s", err)
+			continue
+		}
+
+		// 解析行
+
+		// 发送数据
+		// ch <- record
+	}
 
 	close(ch)
 }
 
 // ReadDigitalCsv 读取CSV文件, 将其转换成 C.Digital 结构后发送到缓存队列
-func ReadDigitalCsv(filename string, ch chan []DigitalSection, wg *sync.WaitGroup) {
+func ReadDigitalCsv(filepath string, ch chan []DigitalSection, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
+
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
+	// CSV读取器
+	reader := csv.NewReader(bufio.NewReader(file))
+
+	// 按行读取
+	for {
+		// 读取一行, 判断是否为EOF
+		_, err := reader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			} else {
+			}
+			log.Printf("Error reading record: %s", err)
+			continue
+		}
+
+		// 解析行
+
+		// 发送数据
+		// ch <- record
+	}
 
 	close(ch)
 }
 
 // ReadStaticAnalogCsv 读取CSV文件, 将其转换成 []C.StaticAnalog 切片
-func ReadStaticAnalogCsv(filename string) StaticAnalogSection {
+func ReadStaticAnalogCsv(filepath string) StaticAnalogSection {
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
 	return StaticAnalogSection{}
 }
 
 // ReadStaticDigitalCsv 读取CSV文件, 将其转换成 []C.StaticDigital 切片
-func ReadStaticDigitalCsv(filename string) StaticDigitalSection {
+func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
 	return StaticDigitalSection{}
 }
 
@@ -112,9 +188,13 @@ func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalog
 }
 
 func main() {
-	fastAnalogCsvPath := "../CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv"
-	fastDigitalCsvPath := "../CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv"
-	normalAnalogCsvPath := "../CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
-	normalDigitalCsvPath := "../CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
+	wdDir, err := os.Getwd()
+	if err != nil {
+		panic("get word dir err")
+	}
+	fastAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv"
+	fastDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv"
+	normalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
+	normalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
 	FastWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 }
