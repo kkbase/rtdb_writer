@@ -7,18 +7,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"plugin"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // #cgo CFLAGS: -I../plugin
-// #include "cplugin.h"
+// #include "dylib.h"
 // #include "write_plugin.h"
 import "C"
 
-const CacheSize = 128
+const CacheSize = 64
 
 type AnalogSection struct {
 	Time int64
@@ -41,7 +41,7 @@ type StaticDigitalSection struct {
 // ReadAnalogCsv 读取CSV文件, 将其转换成 C.Analog 结构后发送到缓存队列
 func ReadAnalogCsv(filepath string, ch chan AnalogSection, wg *sync.WaitGroup, closeCh chan bool) {
 	defer wg.Done()
-
+	fmt.Println("filepath: ", filepath)
 	// 打开文件
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -60,6 +60,10 @@ func ReadAnalogCsv(filepath string, ch chan AnalogSection, wg *sync.WaitGroup, c
 		record, err := reader.Read()
 		if err != nil {
 			if err.Error() == "EOF" {
+				if len(dataList) != 0 {
+					fmt.Println("send!: ", len(dataList), timeFlag)
+					ch <- AnalogSection{Time: timeFlag, Data: dataList}
+				}
 				closeCh <- true
 				break
 			}
@@ -140,10 +144,18 @@ func ReadAnalogCsv(filepath string, ch chan AnalogSection, wg *sync.WaitGroup, c
 			timeFlag = time
 		}
 
+		if len(dataList)%1000 != 0 {
+			fmt.Println("len: ", len(dataList))
+		}
+
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
 		if timeFlag != time {
+			if len(dataList) != 0 {
+				fmt.Println("send!: ", len(dataList), timeFlag)
+				ch <- AnalogSection{Time: timeFlag, Data: dataList}
+			}
 			timeFlag = time
-			ch <- AnalogSection{Time: time, Data: dataList}
+
 			dataList = make([]C.Analog, 0)
 		}
 
@@ -188,6 +200,9 @@ func ReadDigitalCsv(filepath string, ch chan DigitalSection, wg *sync.WaitGroup,
 		record, err := reader.Read()
 		if err != nil {
 			if err.Error() == "EOF" {
+				if len(dataList) != 0 {
+					ch <- DigitalSection{Time: timeFlag, Data: dataList}
+				}
 				closeCh <- true
 				break
 			}
@@ -265,10 +280,16 @@ func ReadDigitalCsv(filepath string, ch chan DigitalSection, wg *sync.WaitGroup,
 			timeFlag = time
 		}
 
+		if len(dataList)%1000 == 0 {
+			fmt.Println("len: ", len(dataList))
+		}
+
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
 		if timeFlag != time {
+			if len(dataList) != 0 {
+				ch <- DigitalSection{Time: timeFlag, Data: dataList}
+			}
 			timeFlag = time
-			ch <- DigitalSection{Time: time, Data: dataList}
 			dataList = make([]C.Digital, 0)
 		}
 
@@ -321,18 +342,18 @@ func FastWriteRealtimeSection(fastAnalogCh chan AnalogSection, fastDigitalCh cha
 	for {
 		select {
 		case _ = <-fastAnalogCh:
-			// fmt.Println("cgo, fast analog write", record.Time)
+			// GlobalDylib.DyWriteAnalog(section)
 		case _ = <-fastDigitalCh:
-			// fmt.Println("cgo, fast digital write", record.Time)
-		case _ = <-normalAnalogCh:
-			// fmt.Println("cgo, normal analog write", record.Time)
+			// GlobalDylib.DyWriteDigital(section)
+		case section := <-normalAnalogCh:
+			GlobalDylib.DyWriteAnalog(section)
 		case _ = <-normalDigitalCh:
-		// fmt.Println("cgo, normal digital write", record.Time)
+			// GlobalDylib.DyWriteDigital(section)
 		case _ = <-closeCh:
 			closeSum++
 		}
 
-		if closeSum == 4 {
+		if closeSum == 2 {
 			break
 		}
 	}
@@ -345,22 +366,84 @@ func WriteHistorySection() {
 func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
 	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	close(fastAnalogCh)
+	close(fastDigitalCh)
 	normalAnalogCh := make(chan AnalogSection, CacheSize)
 	normalDigitalCh := make(chan DigitalSection, CacheSize)
 	closeCh := make(chan bool)
 	wg := new(sync.WaitGroup)
 
-	wg.Add(4)
-	go ReadAnalogCsv(fastAnalogCsvPath, fastAnalogCh, wg, closeCh)
-	go ReadDigitalCsv(fastDigitalCsvPath, fastDigitalCh, wg, closeCh)
+	wg.Add(2)
+	// go ReadAnalogCsv(fastAnalogCsvPath, fastAnalogCh, wg, closeCh)
+	// go ReadDigitalCsv(fastDigitalCsvPath, fastDigitalCh, wg, closeCh)
 	go ReadAnalogCsv(normalAnalogCsvPath, normalAnalogCh, wg, closeCh)
 	go ReadDigitalCsv(normalDigitalCsvPath, normalDigitalCh, wg, closeCh)
-
 	FastWriteRealtimeSection(fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, closeCh)
 	wg.Wait()
 }
 
-func main2() {
+type DyLib struct {
+	handle C.DYLIB_HANDLE
+}
+
+func NewDyLib(path string) *DyLib {
+	return &DyLib{
+		handle: C.load_library(C.CString(path)),
+	}
+}
+
+func (df *DyLib) Login() {
+	C.dy_login(df.handle)
+}
+
+func (df *DyLib) Logout() {
+	C.dy_logout(df.handle)
+}
+
+var AA = atomic.Int32{}
+
+func (df *DyLib) DyWriteAnalog(section AnalogSection) {
+	if len(section.Data) == 0 {
+		AA.Add(1)
+		return
+	}
+	C.dy_write_analog(df.handle, C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *DyLib) DyWriteDigital(section DigitalSection) {
+	if len(section.Data) == 0 {
+		AA.Add(1)
+		return
+	}
+	C.dy_write_digital(df.handle, C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *DyLib) DyWriteStaticAnalog(section StaticAnalogSection) {
+	if len(section.Data) == 0 {
+		AA.Add(1)
+		return
+	}
+	C.dy_write_static_analog(df.handle, (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *DyLib) DyWriteStaticDigital(section StaticDigitalSection) {
+	if len(section.Data) == 0 {
+		AA.Add(1)
+		return
+	}
+	C.dy_write_static_digital(df.handle, (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+var GlobalDylib *DyLib = nil
+
+func InitGlobalDylib(path string) {
+	GlobalDylib = NewDyLib(path)
+}
+
+func main() {
+	dyPath := "/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libcwrite_plugin.dylib"
+	InitGlobalDylib(dyPath)
+
 	wdDir, err := os.Getwd()
 	if err != nil {
 		panic("get word dir err")
@@ -370,29 +453,5 @@ func main2() {
 	normalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
 	normalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
 	FastWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
-}
-
-func main3() {
-	plug, err := plugin.Open("/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libgowrite_plugin.dylib")
-	if err != nil {
-		panic("open plugin err: " + err.Error())
-	}
-
-	loginSym, err := plug.Lookup("Login")
-	if err != nil {
-		panic(fmt.Sprintln("plugin lookup login err:", err))
-	}
-	loginSym.(func())()
-
-	fmt.Println("123")
-}
-
-func main() {
-	dlpath := "/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libcwrite_plugin.dylib"
-	cLdPath := C.CString(dlpath)
-	handle := C.load_library(cLdPath)
-	defer C.close_library(handle)
-
-	C.dy_login(handle)
-	defer C.dy_logout(handle)
+	fmt.Println(AA.Load())
 }
