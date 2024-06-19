@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const CacheSize = 128
@@ -374,7 +375,6 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 		if err != nil {
 			if err.Error() == "EOF" {
 				if len(dataList) != 0 {
-					fmt.Println("send: ", filepath, len(dataList))
 					ch <- AnalogSection{Time: timeFlag, Data: dataList}
 				}
 				closeCh <- struct{}{}
@@ -399,7 +399,6 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
 		if timeFlag != time {
-			fmt.Println("send: ", filepath, len(dataList), "t1: ", timeFlag, "t2", time)
 			ch <- AnalogSection{Time: timeFlag, Data: dataList}
 			timeFlag = time
 			dataList = make([]C.Analog, 0)
@@ -435,7 +434,6 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 		if err != nil {
 			if err.Error() == "EOF" {
 				if len(dataList) != 0 {
-					fmt.Println("send: ", filepath, len(dataList))
 					ch <- DigitalSection{Time: timeFlag, Data: dataList}
 				}
 				closeCh <- struct{}{}
@@ -461,7 +459,6 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
 		if timeFlag != time {
 			if len(dataList) != 0 {
-				fmt.Println("send: ", filepath, len(dataList), "t1: ", timeFlag, "t2", time)
 				ch <- DigitalSection{Time: timeFlag, Data: dataList}
 			}
 			timeFlag = time
@@ -578,12 +575,77 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 	close(normalDigitalCh)
 }
 
-func StaticWrite(analogPath string, digitalPath string) {
-	GlobalDylib.DyWriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
-	GlobalDylib.DyWriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
+// PeriodicWriteRealtimeSection 周期性写入实时断面
+func PeriodicWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
+	num := 0
+
+	startWrite := time.Now()
+	sleepDurationSum := time.Duration(0)
+	for {
+		num++
+
+		start := time.Now()
+		select {
+		case section := <-fastAnalogCh:
+			GlobalDylib.DyWriteAnalog(section)
+		default:
+		}
+		select {
+		case section := <-fastDigitalCh:
+			GlobalDylib.DyWriteDigital(section)
+		default:
+		}
+		if num%400 == 0 {
+			select {
+			case section := <-normalAnalogCh:
+				GlobalDylib.DyWriteAnalog(section)
+			default:
+			}
+			select {
+			case section := <-normalDigitalCh:
+				GlobalDylib.DyWriteDigital(section)
+			default:
+			}
+		}
+		end := time.Now()
+		duration := end.Sub(start)
+		if duration < time.Millisecond {
+			sleepDuration := time.Millisecond - duration
+			sleepDurationSum += sleepDuration
+			time.Sleep(sleepDuration)
+		}
+
+		if len(closeChan) == 4 && len(fastAnalogCh) == 0 && len(fastDigitalCh) == 0 && len(normalAnalogCh) == 0 && len(normalDigitalCh) == 0 {
+			break
+		}
+	}
+	for i := 0; i < 4; i++ {
+		<-closeChan
+	}
+	close(closeChan)
+	close(fastAnalogCh)
+	close(fastDigitalCh)
+	close(normalAnalogCh)
+	close(normalDigitalCh)
+
+	endWrite := time.Now()
+	allTime := endWrite.Sub(startWrite)
+	writeTime := allTime - sleepDurationSum
+	fmt.Println("周期性写入 - 写入时间:", writeTime, "睡眠时间: ", sleepDurationSum, "总时间: ", allTime)
 }
 
+// StaticWrite 静态写入
+func StaticWrite(analogPath string, digitalPath string) {
+	writeStart := time.Now()
+	GlobalDylib.DyWriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
+	GlobalDylib.DyWriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
+	writeEnd := time.Now()
+	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
+}
+
+// FastWrite 极速写入
 func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+	writeStart := time.Now()
 	closeCh := make(chan struct{}, 4)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
 	fastDigitalCh := make(chan DigitalSection, CacheSize)
@@ -596,6 +658,25 @@ func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalog
 	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh)
 	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh)
 	FastWriteRealtimeSection(closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
+	wg.Wait()
+	writeEnd := time.Now()
+	fmt.Println("极速写入 - 写入耗时:", writeEnd.Sub(writeStart))
+}
+
+// PeriodicWrite 周期性写入
+func PeriodicWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+	closeCh := make(chan struct{}, 4)
+	fastAnalogCh := make(chan AnalogSection, CacheSize)
+	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wg := new(sync.WaitGroup)
+	wg.Add(4)
+	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh)
+	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh)
+	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh)
+	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh)
+	PeriodicWriteRealtimeSection(closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
 	wg.Wait()
 }
 
@@ -677,13 +758,18 @@ func main() {
 		panic("get word dir err")
 	}
 
+	// 静态写入
 	staticAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_ANALOG.csv"
 	staticDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_DIGITAL.csv"
 	StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
 
+	// 极速写入
 	fastAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv"
 	fastDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv"
 	normalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
 	normalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
 	FastWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+
+	// 周期性写入
+	PeriodicWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 }
