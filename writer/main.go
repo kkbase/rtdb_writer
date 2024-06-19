@@ -195,6 +195,162 @@ func ParseDigitalRecord(record []string) (int64, C.Digital, error) {
 	return time, digital, nil
 }
 
+func ParseStaticAnalogRecord(record []string) (C.StaticAnalog, error) {
+	staticAnalog := C.StaticAnalog{}
+
+	// 去除首行
+	if record[0] == "P_NUM" {
+		return staticAnalog, errors.New("continue HEAD")
+	}
+
+	// 去除尾行
+	if len(record) != 17 {
+		return staticAnalog, errors.New("continue TAIL")
+	}
+
+	pNum, err := strconv.ParseInt(record[0], 10, 32)
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse pNum error", record[0]))
+	}
+
+	tagt, err := strconv.ParseInt(record[1], 10, 32)
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse tagt error", record[1]))
+	}
+
+	fack, err := strconv.ParseInt(record[2], 10, 32)
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse facl error", record[2]))
+	}
+
+	l4ar, err := strconv.ParseBool(record[3])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse l4ar error", record[3]))
+	}
+
+	l3ar, err := strconv.ParseBool(record[4])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse l3ar error", record[4]))
+	}
+
+	l2ar, err := strconv.ParseBool(record[5])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse l2ar error", record[5]))
+	}
+
+	l1ar, err := strconv.ParseBool(record[6])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse l1ar error", record[6]))
+	}
+
+	h4ar, err := strconv.ParseBool(record[7])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse h4ar error", record[7]))
+	}
+
+	h3ar, err := strconv.ParseBool(record[8])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse h3ar error", record[8]))
+	}
+
+	h2ar, err := strconv.ParseBool(record[9])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse h2ar error", record[9]))
+	}
+
+	h1ar, err := strconv.ParseBool(record[10])
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse h1ar error", record[10]))
+	}
+
+	for i := 0; i < len(record[11]) && i < 32; i++ {
+		staticAnalog.chn[i] = C.char(record[11][i])
+	}
+
+	for i := 0; i < len(record[12]) && i < 32; i++ {
+		staticAnalog.pn[i] = C.char(record[12][i])
+	}
+
+	for i := 0; i < len(record[13]) && i < 128; i++ {
+		staticAnalog.desc[i] = C.char(record[13][i])
+	}
+
+	for i := 0; i < len(record[14]) && i < 32; i++ {
+		staticAnalog.unit[i] = C.char(record[14][i])
+	}
+
+	mu, err := strconv.ParseFloat(record[15], 32)
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse mu error", record[15]))
+	}
+
+	md, err := strconv.ParseFloat(record[16], 32)
+	if err != nil {
+		return staticAnalog, errors.New(fmt.Sprintln("parse md error", record[16]))
+	}
+
+	staticAnalog.p_num = C.int32_t(pNum)
+	staticAnalog.tagt = C.uint16_t(tagt)
+	staticAnalog.fack = C.uint16_t(fack)
+	staticAnalog.l4ar = C.bool(l4ar)
+	staticAnalog.l3ar = C.bool(l3ar)
+	staticAnalog.l2ar = C.bool(l2ar)
+	staticAnalog.l1ar = C.bool(l1ar)
+	staticAnalog.h4ar = C.bool(h4ar)
+	staticAnalog.h3ar = C.bool(h3ar)
+	staticAnalog.h2ar = C.bool(h2ar)
+	staticAnalog.h1ar = C.bool(h1ar)
+	staticAnalog.mu = C.float(mu)
+	staticAnalog.md = C.float(md)
+
+	return staticAnalog, nil
+}
+
+func ParseStaticDigitalRecord(record []string) (C.StaticDigital, error) {
+	staticDigital := C.StaticDigital{}
+
+	// 去除首行
+	if record[0] == "P_NUM" {
+		return staticDigital, errors.New("continue HEAD")
+	}
+
+	// 去除尾行
+	if len(record) != 6 {
+		return staticDigital, errors.New("continue TAIL")
+	}
+
+	pNum, err := strconv.ParseInt(record[0], 10, 32)
+	if err != nil {
+		return staticDigital, errors.New(fmt.Sprintln("parse pNum error", record[0]))
+	}
+
+	fack, err := strconv.ParseInt(record[1], 10, 32)
+	if err != nil {
+		return staticDigital, errors.New(fmt.Sprintln("parse facl error", record[1]))
+	}
+
+	for i := 0; i < len(record[2]) && i < 32; i++ {
+		staticDigital.chn[i] = C.char(record[2][i])
+	}
+
+	for i := 0; i < len(record[3]) && i < 32; i++ {
+		staticDigital.pn[i] = C.char(record[3][i])
+	}
+
+	for i := 0; i < len(record[4]) && i < 128; i++ {
+		staticDigital.desc[i] = C.char(record[4][i])
+	}
+
+	for i := 0; i < len(record[5]) && i < 32; i++ {
+		staticDigital.unit[i] = C.char(record[5][i])
+	}
+
+	staticDigital.p_num = C.int32_t(pNum)
+	staticDigital.fack = C.uint16_t(fack)
+
+	return staticDigital, nil
+}
+
 // ReadAnalogCsv 读取CSV文件, 将其转换成 C.Analog 结构后发送到缓存队列
 func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan AnalogSection) {
 	defer wg.Done()
@@ -318,13 +474,80 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 }
 
 // ReadStaticAnalogCsv 读取CSV文件, 将其转换成 []C.StaticAnalog 切片
-func ReadStaticAnalogCsv(_ string) StaticAnalogSection {
-	return StaticAnalogSection{}
+func ReadStaticAnalogCsv(filepath string) StaticAnalogSection {
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
+	// CSV读取器
+	reader := csv.NewReader(NewCRFilterReader(bufio.NewReader(file)))
+
+	dataList := make([]C.StaticAnalog, 0)
+	for {
+		// 读取一行, 判断是否为EOF
+		record, err := reader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			log.Printf("Error reading record: %s", err)
+			continue
+		}
+
+		staticAnalog, err := ParseStaticAnalogRecord(record)
+		if err != nil {
+			if !strings.Contains(err.Error(), "continue HEAD") {
+				log.Printf("Error parsing record: %s", err)
+			}
+			continue
+		}
+
+		dataList = append(dataList, staticAnalog)
+	}
+
+	return StaticAnalogSection{Data: dataList}
 }
 
 // ReadStaticDigitalCsv 读取CSV文件, 将其转换成 []C.StaticDigital 切片
-func ReadStaticDigitalCsv(_ string) StaticDigitalSection {
-	return StaticDigitalSection{}
+func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
+	// 打开文件
+	file, err := os.Open(filepath)
+	if err != nil {
+		panic("can not open file: " + filepath)
+	}
+	defer func() { _ = file.Close() }()
+
+	// CSV读取器
+	reader := csv.NewReader(NewCRFilterReader(bufio.NewReader(file)))
+
+	dataList := make([]C.StaticDigital, 0)
+	for {
+		// 读取一行, 判断是否为EOF
+		record, err := reader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			log.Printf("Error reading record: %s", err)
+			continue
+		}
+
+		staticDigital, err := ParseStaticDigitalRecord(record)
+		if err != nil {
+			if !strings.Contains(err.Error(), "continue HEAD") {
+				log.Printf("Error parsing record: %s", err)
+			}
+			continue
+		}
+
+		dataList = append(dataList, staticDigital)
+
+	}
+
+	return StaticDigitalSection{Data: dataList}
 }
 
 // FastWriteRealtimeSection 极速写入实时断面
@@ -355,7 +578,9 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 	close(normalDigitalCh)
 }
 
-func WriteHistorySection() {
+func StaticWrite(analogPath string, digitalPath string) {
+	GlobalDylib.DyWriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
+	GlobalDylib.DyWriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
 }
 
 func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
@@ -374,6 +599,8 @@ func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalog
 	wg.Wait()
 }
 
+// DyLib 动态库加载对象
+// 用于加载插件, 内部调用了 plugin/dylib.h 头文件, 这个头文件封装了C的动态库加载函数
 type DyLib struct {
 	handle C.DYLIB_HANDLE
 }
@@ -424,7 +651,8 @@ func NewCRFilterReader(r *bufio.Reader) *CrFilterReader {
 	return &CrFilterReader{reader: r}
 }
 
-// Read 实现了 io.Reader 接口，去除读取数据流中的 \r 字符
+// Read 实现了 io.Reader 接口，替换数据流中的 '\r' 为 '\n'
+// 备注: 因解析CSV文件时, 发现文件格式不标准, 有的CSV文件是以 "\r\r" 作为分隔符的, 所以统一替换成 '\n'
 func (r *CrFilterReader) Read(p []byte) (int, error) {
 	n, err := r.reader.Read(p)
 	if err != nil {
@@ -448,6 +676,11 @@ func main() {
 	if err != nil {
 		panic("get word dir err")
 	}
+
+	staticAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_ANALOG.csv"
+	staticDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_DIGITAL.csv"
+	StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
+
 	fastAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv"
 	fastDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv"
 	normalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
