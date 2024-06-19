@@ -1,7 +1,5 @@
 package main
 
-// #cgo CFLAGS: -I../plugin
-// #include "write_plugin.h"
 import "C"
 import (
 	"bufio"
@@ -14,6 +12,11 @@ import (
 	"strings"
 	"sync"
 )
+
+// #cgo CFLAGS: -I../plugin
+// #include "cplugin.h"
+// #include "write_plugin.h"
+import "C"
 
 const CacheSize = 128
 
@@ -369,7 +372,7 @@ func main2() {
 	FastWrite(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 }
 
-func main() {
+func main3() {
 	plug, err := plugin.Open("/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libgowrite_plugin.dylib")
 	if err != nil {
 		panic("open plugin err: " + err.Error())
@@ -382,4 +385,14 @@ func main() {
 	loginSym.(func())()
 
 	fmt.Println("123")
+}
+
+func main() {
+	dlpath := "/Users/wangjingbo/Desktop/rtdb_writer/plugin_example/libcwrite_plugin.dylib"
+	cLdPath := C.CString(dlpath)
+	handle := C.load_library(cLdPath)
+	defer C.close_library(handle)
+
+	C.dy_login(handle)
+	defer C.dy_logout(handle)
 }
