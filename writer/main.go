@@ -53,7 +53,7 @@ func ParseAnalogRecord(record []string) (int64, C.Analog, error) {
 
 	// 解析行
 	// TIME,P_NUM,AV,AVR,Q,BF,FQ,FAI,MS,TEW,CST
-	time, err := strconv.ParseInt(record[0], 10, 64)
+	ts, err := strconv.ParseInt(record[0], 10, 64)
 	if err != nil {
 		return -1, analog, errors.New(fmt.Sprintln("parse time error", record[0]))
 	}
@@ -118,7 +118,7 @@ func ParseAnalogRecord(record []string) (int64, C.Analog, error) {
 	analog.tew = C.char(tew)
 	analog.cst = C.uint16_t(cst)
 
-	return time, analog, nil
+	return ts, analog, nil
 }
 
 // ParseDigitalRecord 解析CSV行
@@ -135,7 +135,7 @@ func ParseDigitalRecord(record []string) (int64, C.Digital, error) {
 		return -1, digital, errors.New("continue TAIL")
 	}
 
-	time, err := strconv.ParseInt(record[0], 10, 64)
+	ts, err := strconv.ParseInt(record[0], 10, 64)
 	if err != nil {
 		return -1, digital, errors.New(fmt.Sprintln("parse time error", record[0]))
 	}
@@ -193,7 +193,7 @@ func ParseDigitalRecord(record []string) (int64, C.Digital, error) {
 	digital.tew = C.char(tew)
 	digital.cst = C.uint16_t(cst)
 
-	return time, digital, nil
+	return ts, digital, nil
 }
 
 func ParseStaticAnalogRecord(record []string) (C.StaticAnalog, error) {
@@ -368,14 +368,14 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 
 	// 按行读取
 	dataList := make([]C.Analog, 0)
-	timeFlag := int64(-1)
+	tsFlag := int64(-1)
 	for {
 		// 读取一行, 判断是否为EOF
 		record, err := reader.Read()
 		if err != nil {
 			if err.Error() == "EOF" {
 				if len(dataList) != 0 {
-					ch <- AnalogSection{Time: timeFlag, Data: dataList}
+					ch <- AnalogSection{Time: tsFlag, Data: dataList}
 				}
 				closeCh <- struct{}{}
 				break
@@ -384,7 +384,7 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 			continue
 		}
 
-		time, analog, err := ParseAnalogRecord(record)
+		ts, analog, err := ParseAnalogRecord(record)
 		if err != nil {
 			if !strings.Contains(err.Error(), "continue HEAD") {
 				log.Printf("Error parsing record: %s", err)
@@ -393,14 +393,14 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 		}
 
 		// time 初始化
-		if timeFlag == -1 {
-			timeFlag = time
+		if tsFlag == -1 {
+			tsFlag = ts
 		}
 
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
-		if timeFlag != time {
-			ch <- AnalogSection{Time: timeFlag, Data: dataList}
-			timeFlag = time
+		if tsFlag != ts {
+			ch <- AnalogSection{Time: tsFlag, Data: dataList}
+			tsFlag = ts
 			dataList = make([]C.Analog, 0)
 		}
 
@@ -427,14 +427,14 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 
 	// 按行读取
 	dataList := make([]C.Digital, 0)
-	timeFlag := int64(-1)
+	tsFlag := int64(-1)
 	for {
 		// 读取一行, 判断是否为EOF
 		record, err := reader.Read()
 		if err != nil {
 			if err.Error() == "EOF" {
 				if len(dataList) != 0 {
-					ch <- DigitalSection{Time: timeFlag, Data: dataList}
+					ch <- DigitalSection{Time: tsFlag, Data: dataList}
 				}
 				closeCh <- struct{}{}
 				break
@@ -443,7 +443,7 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 			continue
 		}
 
-		time, digital, err := ParseDigitalRecord(record)
+		ts, digital, err := ParseDigitalRecord(record)
 		if err != nil {
 			if !strings.Contains(err.Error(), "continue HEAD") {
 				log.Printf("Error parsing record: %s", err)
@@ -452,16 +452,16 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 		}
 
 		// time 初始化
-		if timeFlag == -1 {
-			timeFlag = time
+		if tsFlag == -1 {
+			tsFlag = ts
 		}
 
 		// 如果出现的时间戳, 则更新timeFlag, 发送数据, 并且清空dataList
-		if timeFlag != time {
+		if tsFlag != ts {
 			if len(dataList) != 0 {
-				ch <- DigitalSection{Time: timeFlag, Data: dataList}
+				ch <- DigitalSection{Time: tsFlag, Data: dataList}
 			}
-			timeFlag = time
+			tsFlag = ts
 			dataList = make([]C.Digital, 0)
 		}
 
