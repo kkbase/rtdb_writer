@@ -44,21 +44,31 @@ void dy_logout(DYLIB_HANDLE handle) {
     logout();
 }
 
-void dy_write_analog(DYLIB_HANDLE handle, int64_t time, Analog *analog, int64_t count) {
-    void (*write_analog)(int64_t, Analog*, int64_t) = (void (*)(int64_t, Analog*, int64_t)) GET_FUNCTION(handle.handle, "write_analog");
-    write_analog(time, analog, count);
+void dy_write_rt_analog(DYLIB_HANDLE handle, int64_t time, Analog *analog, int64_t count) {
+    void (*write_rt_analog)(int64_t, Analog*, int64_t) = (void (*)(int64_t, Analog*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_analog");
+    write_rt_analog(time, analog, count);
+}
+
+void dy_write_rt_digital(DYLIB_HANDLE handle, int64_t time, Digital *digital, int64_t count) {
+    void (*write_rt_digital)(int64_t, Digital*, int64_t) = (void (*)(int64_t, Digital*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_digital");
+    write_rt_digital(time, digital, count);
+}
+
+
+void dy_write_his_analog(DYLIB_HANDLE handle, int64_t time, Analog *analog, int64_t count) {
+    void (*write_his_analog)(int64_t, Analog*, int64_t) = (void (*)(int64_t, Analog*, int64_t)) GET_FUNCTION(handle.handle, "write_his_analog");
+    write_his_analog(time, analog, count);
+}
+
+void dy_write_his_digital(DYLIB_HANDLE handle, int64_t time, Digital *digital, int64_t count) {
+    void (*write_his_digital)(int64_t, Digital*, int64_t) = (void (*)(int64_t, Digital*, int64_t)) GET_FUNCTION(handle.handle, "write_his_digital");
+    write_his_digital(time, digital, count);
 }
 
 void dy_write_static_analog(DYLIB_HANDLE handle, StaticAnalog *static_analog, int64_t count) {
     void (*write_static_analog)(StaticAnalog*, int64_t) = (void (*)(StaticAnalog*, int64_t)) GET_FUNCTION(handle.handle, "write_static_analog");
     write_static_analog(static_analog, count);
 }
-
-void dy_write_digital(DYLIB_HANDLE handle, int64_t time, Digital *digital, int64_t count) {
-    void (*write_digital)(int64_t, Digital*, int64_t) = (void (*)(int64_t, Digital*, int64_t)) GET_FUNCTION(handle.handle, "write_digital");
-    write_digital(time, digital, count);
-}
-
 
 void dy_write_static_digital(DYLIB_HANDLE handle, StaticDigital *static_digital, int64_t count) {
     void (*write_static_digital)(StaticDigital*, int64_t) = (void (*)(StaticDigital*, int64_t)) GET_FUNCTION(handle.handle, "write_static_digital");
