@@ -550,16 +550,26 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 // FastWriteRealtimeSection 极速写入实时断面
 func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
 	closeNum := 0
+	writeStart := time.Now()
+	sleepDurationSum := time.Duration(0)
 	for {
 		select {
 		case section := <-fastAnalogCh:
+			wt := time.Now()
 			GlobalDylib.DyWriteAnalog(section)
+			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-fastDigitalCh:
+			wt := time.Now()
 			GlobalDylib.DyWriteDigital(section)
+			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalAnalogCh:
+			wt := time.Now()
 			GlobalDylib.DyWriteAnalog(section)
+			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalDigitalCh:
+			wt := time.Now()
 			GlobalDylib.DyWriteDigital(section)
+			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
 		}
@@ -573,6 +583,7 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 	close(fastDigitalCh)
 	close(normalAnalogCh)
 	close(normalDigitalCh)
+	fmt.Println("极速写入 - 写入耗时:", sleepDurationSum, "总耗时: ", time.Now().Sub(writeStart))
 }
 
 // PeriodicWriteRealtimeSection 周期性写入实时断面
@@ -661,7 +672,11 @@ func PeriodicWriteRealtimeSection(flag50ms bool, closeChan chan struct{}, fastAn
 	endWrite := time.Now()
 	allTime := endWrite.Sub(startWrite)
 	writeTime := allTime - sleepDurationSum
-	fmt.Println("周期性写入 - 写入时间:", writeTime, "睡眠时间: ", sleepDurationSum, "总时间: ", allTime)
+	if flag50ms {
+		fmt.Println("周期性写入(前两秒50ms) - 写入时间:", writeTime, "睡眠时间: ", sleepDurationSum, "总时间: ", allTime)
+	} else {
+		fmt.Println("周期性写入(正常) - 写入时间:", writeTime, "睡眠时间: ", sleepDurationSum, "总时间: ", allTime)
+	}
 }
 
 // StaticWrite 静态写入
@@ -675,7 +690,6 @@ func StaticWrite(analogPath string, digitalPath string) {
 
 // FastWrite 极速写入
 func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
-	writeStart := time.Now()
 	closeCh := make(chan struct{}, 4)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
 	fastDigitalCh := make(chan DigitalSection, CacheSize)
@@ -692,8 +706,6 @@ func FastWrite(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalog
 	time.Sleep(500 * time.Millisecond)
 	FastWriteRealtimeSection(closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
 	wg.Wait()
-	writeEnd := time.Now()
-	fmt.Println("极速写入 - 写入耗时:", writeEnd.Sub(writeStart))
 }
 
 // PeriodicWrite 周期性写入
