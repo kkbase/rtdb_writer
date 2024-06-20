@@ -20,16 +20,16 @@ import (
 // CacheSize  缓存队列大小
 const CacheSize = 64
 
-// OverloadProtectionWriteDuration  过载保护持续时间
+// OverloadProtectionWriteDuration  过载保护持续时间, 2000毫秒(2秒)
 const OverloadProtectionWriteDuration = 2000
 
-// OverloadProtectionWritePeriodic 过载保护写入周期
+// OverloadProtectionWritePeriodic 过载保护写入周期, 50毫秒
 const OverloadProtectionWritePeriodic = 50
 
-// FastRegularWritePeriodic 块采点写入周期
+// FastRegularWritePeriodic 块采点写入周期, 1毫秒
 const FastRegularWritePeriodic = 1
 
-// NormalRegularWritePeriodic 普通点写入周期
+// NormalRegularWritePeriodic 普通点写入周期, 400毫秒
 const NormalRegularWritePeriodic = 400
 
 type WriteRtn struct {
