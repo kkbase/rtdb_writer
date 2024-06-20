@@ -785,8 +785,8 @@ func PeriodicWriteRt(overloadProtectionFlag bool, fastAnalogCsvPath string, fast
 	} else {
 		fmt.Println("周期性写入实时值(关闭过载保护):")
 	}
-	fmt.Println("快采点 - 总时间:", fastRtn.AllTime, "写入时间:", fastRtn.WriteTime, "睡眠时间:", fastRtn.SleepTime, "其他时间:", fastRtn.OtherTime)
-	fmt.Println("普通点 - 总时间:", normalRtn.AllTime, "写入时间:", normalRtn.WriteTime, "睡眠时间:", normalRtn.SleepTime, "其他时间:", normalRtn.OtherTime)
+	fmt.Println("快采点 - 总耗时:", fastRtn.AllTime, "写入耗时:", fastRtn.WriteTime, "睡眠耗时:", fastRtn.SleepTime, "其他耗时:", fastRtn.OtherTime)
+	fmt.Println("普通点 - 总耗时:", normalRtn.AllTime, "写入耗时:", normalRtn.WriteTime, "睡眠耗时:", normalRtn.SleepTime, "其他耗时:", normalRtn.OtherTime)
 	close(fastRtnCh)
 	close(normalRtnCh)
 }
