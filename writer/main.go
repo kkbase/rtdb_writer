@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const CacheSize = 128
+const CacheSize = 64
 
 type AnalogSection struct {
 	Time int64
