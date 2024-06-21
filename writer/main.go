@@ -9,6 +9,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
 	"log"
 	"os"
 	"strconv"
@@ -576,19 +577,19 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 		select {
 		case section := <-fastAnalogCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteRtAnalog(section)
+			GlobalPlugin.WriteRtAnalog(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-fastDigitalCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteRtDigital(section)
+			GlobalPlugin.WriteRtDigital(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalAnalogCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteRtAnalog(section)
+			GlobalPlugin.WriteRtAnalog(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalDigitalCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteRtDigital(section)
+			GlobalPlugin.WriteRtDigital(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -617,11 +618,11 @@ func FastWriteHisSection(closeChan chan struct{}, analogCh chan AnalogSection, d
 		select {
 		case section := <-analogCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteHisAnalog(section)
+			GlobalPlugin.WriteHisAnalog(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-digitalCh:
 			wt := time.Now()
-			GlobalDylib.DyWriteHisDigital(section)
+			GlobalPlugin.WriteHisDigital(section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -665,12 +666,12 @@ func PeriodicWriteRtSection(
 		start := time.Now()
 		select {
 		case section := <-analogCh:
-			GlobalDylib.DyWriteRtAnalog(section)
+			GlobalPlugin.WriteRtAnalog(section)
 		default:
 		}
 		select {
 		case section := <-digitalCh:
-			GlobalDylib.DyWriteRtDigital(section)
+			GlobalPlugin.WriteRtDigital(section)
 		default:
 		}
 		duration := time.Now().Sub(start)
@@ -721,8 +722,8 @@ func PeriodicWriteRtSection(
 // StaticWrite 静态写入
 func StaticWrite(analogPath string, digitalPath string) {
 	writeStart := time.Now()
-	GlobalDylib.DyWriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
-	GlobalDylib.DyWriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
+	GlobalPlugin.WriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
+	GlobalPlugin.WriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
 	writeEnd := time.Now()
 	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
 }
@@ -807,54 +808,54 @@ func FastWriteHis(analogCsvPath string, digitalCsvPath string) {
 	wg.Wait()
 }
 
-// DyLib 动态库加载对象
+// WritePlugin 写入插件
 // 用于加载插件, 内部调用了 plugin/dylib.h 头文件, 这个头文件封装了C的动态库加载函数
-type DyLib struct {
+type WritePlugin struct {
 	handle C.DYLIB_HANDLE
 }
 
-func NewDyLib(path string) *DyLib {
-	return &DyLib{
+func NewWritePlugin(path string) *WritePlugin {
+	return &WritePlugin{
 		handle: C.load_library(C.CString(path)),
 	}
 }
 
-func (df *DyLib) Login() {
+func (df *WritePlugin) Login() {
 	C.dy_login(df.handle)
 }
 
-func (df *DyLib) Logout() {
+func (df *WritePlugin) Logout() {
 	C.dy_logout(df.handle)
 }
 
-func (df *DyLib) DyWriteRtAnalog(section AnalogSection) {
+func (df *WritePlugin) WriteRtAnalog(section AnalogSection) {
 	C.dy_write_rt_analog(df.handle, C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *DyLib) DyWriteRtDigital(section DigitalSection) {
+func (df *WritePlugin) WriteRtDigital(section DigitalSection) {
 	C.dy_write_rt_digital(df.handle, C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *DyLib) DyWriteHisAnalog(section AnalogSection) {
+func (df *WritePlugin) WriteHisAnalog(section AnalogSection) {
 	C.dy_write_his_analog(df.handle, C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *DyLib) DyWriteHisDigital(section DigitalSection) {
+func (df *WritePlugin) WriteHisDigital(section DigitalSection) {
 	C.dy_write_his_digital(df.handle, C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *DyLib) DyWriteStaticAnalog(section StaticAnalogSection) {
+func (df *WritePlugin) WriteStaticAnalog(section StaticAnalogSection) {
 	C.dy_write_static_analog(df.handle, (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *DyLib) DyWriteStaticDigital(section StaticDigitalSection) {
+func (df *WritePlugin) WriteStaticDigital(section StaticDigitalSection) {
 	C.dy_write_static_digital(df.handle, (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-var GlobalDylib *DyLib = nil
+var GlobalPlugin *WritePlugin = nil
 
-func InitGlobalDylib(path string) {
-	GlobalDylib = NewDyLib(path)
+func InitGlobalPlugin(path string) {
+	GlobalPlugin = NewWritePlugin(path)
 }
 
 // CrFilterReader 是一个自定义的 io.Reader，用于去除数据流中的 \r 字符
@@ -884,37 +885,129 @@ func (r *CrFilterReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func main() {
-	wdDir, err := os.Getwd()
-	if err != nil {
-		panic("get word dir err")
+var rootCmd = &cobra.Command{
+	Use:   "Rtdb Writer",
+	Short: "RTDB/TSDB performance testing tool",
+	Run: func(cmd *cobra.Command, args []string) {
+		_ = cmd.Help()
+	},
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Rtdb Writer version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("v0.1.0")
+	},
+}
+
+var staticWrite = &cobra.Command{
+	Use:   "static_write",
+	Short: "Write STATIC_ANALOG.csv, STATIC_DIGITAL.csv",
+	Run: func(cmd *cobra.Command, args []string) {
+		pluginPath, _ := cmd.Flags().GetString("plugin")
+		staticAnalogCsvPath, _ := cmd.Flags().GetString("static_analog")
+		staticDigitalCsvPath, _ := cmd.Flags().GetString("static_digital")
+
+		// 加载动态库
+		InitGlobalPlugin(pluginPath)
+
+		// 静态写入
+		StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
+	},
+}
+
+var rtFastWrite = &cobra.Command{
+	Use:   "rt_fast_write",
+	Short: "Fast Write REALTIME_FAST_ANALOG.csv, REALTIME_FAST_DIGITAL.csv, REALTIME_NORMAL_ANALOG.csv, REALTIME_NORMAL_DIGITAL.csv",
+	Run: func(cmd *cobra.Command, args []string) {
+		pluginPath, _ := cmd.Flags().GetString("plugin")
+		fastAnalogCsvPath, _ := cmd.Flags().GetString("rt_fast_analog")
+		fastDigitalCsvPath, _ := cmd.Flags().GetString("rt_fast_digital")
+		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
+		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
+
+		// 加载动态库
+		InitGlobalPlugin(pluginPath)
+
+		// 极速写入
+		FastWriteRt(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+	},
+}
+
+var hisFastWrite = &cobra.Command{
+	Use:   "his_fast_write",
+	Short: "Fast Write HISTORY_NORMAL_ANALOG.csv, HISTORY_NORMAL_DIGITAL.csv",
+	Run: func(cmd *cobra.Command, args []string) {
+		pluginPath, _ := cmd.Flags().GetString("plugin")
+		fastAnalogCsvPath, _ := cmd.Flags().GetString("his_fast_analog")
+		fastDigitalCsvPath, _ := cmd.Flags().GetString("his_fast_digital")
+
+		// 加载动态库
+		InitGlobalPlugin(pluginPath)
+
+		// 极速写入历史
+		FastWriteHis(fastAnalogCsvPath, fastDigitalCsvPath)
+	},
+}
+
+var rtPeriodicWrite = &cobra.Command{
+	Use:   "rt_periodic_write",
+	Short: "Periodic Write REALTIME_FAST_ANALOG.csv, REALTIME_FAST_DIGITAL.csv, REALTIME_NORMAL_ANALOG.csv, REALTIME_NORMAL_DIGITAL.csv",
+	Run: func(cmd *cobra.Command, args []string) {
+		pluginPath, _ := cmd.Flags().GetString("plugin")
+		overloadProtection, _ := cmd.Flags().GetBool("overload_protection")
+		fastAnalogCsvPath, _ := cmd.Flags().GetString("rt_fast_analog")
+		fastDigitalCsvPath, _ := cmd.Flags().GetString("rt_fast_digital")
+		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
+		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
+
+		// 加载动态库
+		InitGlobalPlugin(pluginPath)
+
+		// 周期性写入
+		PeriodicWriteRt(overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+	},
+}
+
+func init() {
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	rootCmd.AddCommand(versionCmd)
+
+	rootCmd.AddCommand(staticWrite)
+	staticWrite.Flags().StringP("plugin", "", "", "plugin path")
+	staticWrite.Flags().StringP("static_analog", "", "", "static analog csv path")
+	staticWrite.Flags().StringP("static_digital", "", "", "static digital csv path")
+
+	rootCmd.AddCommand(rtFastWrite)
+	rtFastWrite.Flags().StringP("plugin", "", "", "plugin path")
+	rtFastWrite.Flags().StringP("rt_fast_analog", "", "", "realtime fast analog csv path")
+	rtFastWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
+	rtFastWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
+	rtFastWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
+
+	rootCmd.AddCommand(hisFastWrite)
+	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
+	hisFastWrite.Flags().StringP("his_fast_analog", "", "", "history fast analog csv path")
+	hisFastWrite.Flags().StringP("his_fast_digital", "", "", "history fast digital csv path")
+
+	rootCmd.AddCommand(rtPeriodicWrite)
+	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
+	rtPeriodicWrite.Flags().BoolP("overload_protection", "", false, "overload protection flag")
+	rtPeriodicWrite.Flags().StringP("rt_fast_analog", "", "", "realtime fast analog csv path")
+	rtPeriodicWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
+	rtPeriodicWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
+	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
+}
 
-	staticAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_ANALOG.csv"
-	staticDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_DIGITAL.csv"
-	rtFastAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv"
-	rtFastDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv"
-	rtNormalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv"
-	rtNormalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv"
-	hisNormalAnalogCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_ANALOG.csv"
-	hisNormalDigitalCsvPath := wdDir + "/CSV20240614/1718350759143_HISTORY_NORMAL_DIGITAL.csv"
-	dyPath := wdDir + "/plugin_example/libcwrite_plugin.dylib"
-
-	// 加载动态库
-	InitGlobalDylib(dyPath)
-
-	// 静态写入
-	StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
-
-	// 极速写入实时值
-	FastWriteRt(rtFastAnalogCsvPath, rtFastDigitalCsvPath, rtNormalAnalogCsvPath, rtNormalDigitalCsvPath)
-
-	// 周期性写入实时值(关闭过载保护)
-	PeriodicWriteRt(false, rtFastAnalogCsvPath, rtFastDigitalCsvPath, rtNormalAnalogCsvPath, rtNormalDigitalCsvPath)
-
-	// 周期性写入实时值(开启过载保护)
-	PeriodicWriteRt(true, rtFastAnalogCsvPath, rtFastDigitalCsvPath, rtNormalAnalogCsvPath, rtNormalDigitalCsvPath)
-
-	// 极速写历史值
-	FastWriteHis(hisNormalAnalogCsvPath, hisNormalDigitalCsvPath)
+func main() {
+	Execute()
 }
