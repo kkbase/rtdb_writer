@@ -940,8 +940,8 @@ var hisFastWrite = &cobra.Command{
 	Short: "Fast Write HISTORY_NORMAL_ANALOG.csv, HISTORY_NORMAL_DIGITAL.csv",
 	Run: func(cmd *cobra.Command, args []string) {
 		pluginPath, _ := cmd.Flags().GetString("plugin")
-		fastAnalogCsvPath, _ := cmd.Flags().GetString("his_fast_analog")
-		fastDigitalCsvPath, _ := cmd.Flags().GetString("his_fast_digital")
+		fastAnalogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
+		fastDigitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -989,8 +989,8 @@ func init() {
 
 	rootCmd.AddCommand(hisFastWrite)
 	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
-	hisFastWrite.Flags().StringP("his_fast_analog", "", "", "history fast analog csv path")
-	hisFastWrite.Flags().StringP("his_fast_digital", "", "", "history fast digital csv path")
+	hisFastWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
+	hisFastWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")

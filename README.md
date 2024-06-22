@@ -9,13 +9,22 @@
 # 目录结构
 ```tex
 .
-├── LICENSE
-├── README.md
+├── CSV20240614 // 测试CSV示例文件
+├── README.md   // 架构说明文档
 ├── plugin
-│   └── write_plugin.h  // 插件头文件
-├── plugin_example      // 插件示例
-└── writer              // 写入器(由golang实现)
-
+│         ├── dylib.h // 内部封装了基于C的插件加载函数, 此头文件会在writer编译时编译到写数程序中
+│         └── write_plugin.h // !!! 插件接口文件, 各厂商需要根据此头文件自行实现写入插件
+├── plugin_example //插件示例
+│         ├── Makefile
+│         ├── write_plugin.c
+│         └── write_plugin.h
+├── resource // 资源文件, 内涵架构图, 在README.md中会被引用
+│         ├── design_drawing.png
+│         └── periodic_write_process.png
+└── writer
+    ├── build.sh // 编译脚本
+    ├── main.go // 写数程序源代码
+    └── 命令行示例.md // 命令行示例
 ```
 
 # writer设计图
