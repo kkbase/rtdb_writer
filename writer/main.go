@@ -912,8 +912,14 @@ var staticWrite = &cobra.Command{
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
+		// 登入
+		GlobalPlugin.Login()
+
 		// 静态写入
 		StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
+
+		// 登出
+		GlobalPlugin.Logout()
 	},
 }
 
@@ -930,8 +936,14 @@ var rtFastWrite = &cobra.Command{
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
+		// 登入
+		GlobalPlugin.Login()
+
 		// 极速写入
 		FastWriteRt(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+
+		// 登出
+		GlobalPlugin.Logout()
 	},
 }
 
@@ -946,8 +958,14 @@ var hisFastWrite = &cobra.Command{
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
+		// 登入
+		GlobalPlugin.Login()
+
 		// 极速写入历史
 		FastWriteHis(fastAnalogCsvPath, fastDigitalCsvPath)
+
+		// 登出
+		GlobalPlugin.Logout()
 	},
 }
 
@@ -965,8 +983,14 @@ var rtPeriodicWrite = &cobra.Command{
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
+		// 登入
+		GlobalPlugin.Login()
+
 		// 周期性写入
 		PeriodicWriteRt(overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+
+		// 登入
+		GlobalPlugin.Logout()
 	},
 }
 
