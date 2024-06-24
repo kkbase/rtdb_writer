@@ -5,3 +5,7 @@
 **/*plugin.so
 **/*plugin.dll
 **/rtdb_writer
+analog.csv
+digital.csv
+csvgen/main.go
+writer/tests.md
