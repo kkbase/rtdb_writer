@@ -640,12 +640,12 @@ func FastWriteHisSection(closeChan chan struct{}, analogCh chan AnalogSection, d
 	fmt.Println("极速写入历史值 - 总耗时: ", allTime, "写入耗时:", sleepDurationSum, "其他耗时:", allTime-sleepDurationSum)
 }
 
-// PeriodicWriteRtSection 周期性写入实时断面
+// AsyncPeriodicWriteRtSection 周期性写入断面(实时/历史通用)
 // overloadProtectionWriteDuration 过载保护持续时间, 单位毫秒
 // overloadProtectionWritePeriodic 过载保护写入周期, 单位毫秒
 // regularWritePeriodic 常规写入周期, 单位毫秒
 // 返回值: 总时间, 写入时间, 睡眠时间
-func PeriodicWriteRtSection(
+func AsyncPeriodicWriteRtSection(
 	wg *sync.WaitGroup,
 	rtnCh chan WriteRtn,
 	overloadProtectionWriteDuration int,
@@ -770,11 +770,11 @@ func PeriodicWriteRt(overloadProtectionFlag bool, fastAnalogCsvPath string, fast
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
-		go PeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go PeriodicWriteRtSection(wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
+		go AsyncPeriodicWriteRtSection(wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
 	} else {
-		go PeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go PeriodicWriteRtSection(wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
+		go AsyncPeriodicWriteRtSection(wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
 	}
 	wgWrite.Wait()
 	wgRead.Wait()
@@ -806,6 +806,30 @@ func FastWriteHis(analogCsvPath string, digitalCsvPath string) {
 	time.Sleep(500 * time.Millisecond)
 	FastWriteHisSection(closeCh, analogCh, digitalCh)
 	wg.Wait()
+}
+
+// PeriodicWriteHis 周期性写历史
+func PeriodicWriteHis(analogCsvPath string, digitalCsvPath string) {
+	normalCloseCh := make(chan struct{}, 2)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wgRead := new(sync.WaitGroup)
+	wgRead.Add(2)
+	go ReadAnalogCsv(wgRead, normalCloseCh, analogCsvPath, normalAnalogCh)
+	go ReadDigitalCsv(wgRead, normalCloseCh, digitalCsvPath, normalDigitalCh)
+
+	// 睡眠500毫秒, 等待协程加载缓存
+	time.Sleep(500 * time.Millisecond)
+	rtnCh := make(chan WriteRtn, 1)
+	wgWrite := new(sync.WaitGroup)
+	wgWrite.Add(1)
+	go AsyncPeriodicWriteRtSection(wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+	wgWrite.Wait()
+	wgRead.Wait()
+
+	rtn := <-rtnCh
+	fmt.Println("周期性写入历史值: 普通点 - 总耗时:", rtn.AllTime, "写入耗时:", rtn.WriteTime, "睡眠耗时:", rtn.SleepTime, "其他耗时:", rtn.OtherTime)
+	close(rtnCh)
 }
 
 // WritePlugin 写入插件
@@ -952,8 +976,8 @@ var hisFastWrite = &cobra.Command{
 	Short: "Fast Write HISTORY_NORMAL_ANALOG.csv, HISTORY_NORMAL_DIGITAL.csv",
 	Run: func(cmd *cobra.Command, args []string) {
 		pluginPath, _ := cmd.Flags().GetString("plugin")
-		fastAnalogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
-		fastDigitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
+		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
+		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -962,9 +986,31 @@ var hisFastWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 极速写入历史
-		FastWriteHis(fastAnalogCsvPath, fastDigitalCsvPath)
+		FastWriteHis(analogCsvPath, digitalCsvPath)
 
 		// 登出
+		GlobalPlugin.Logout()
+	},
+}
+
+var hisPeriodicWrite = &cobra.Command{
+	Use:   "his_periodic_write",
+	Short: "Periodic Write HISTORY_NORMAL_ANALOG.csv, HISTORY_NORMAL_DIGITAL.csv",
+	Run: func(cmd *cobra.Command, args []string) {
+		pluginPath, _ := cmd.Flags().GetString("plugin")
+		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
+		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
+
+		// 加载动态库
+		InitGlobalPlugin(pluginPath)
+
+		// 登入
+		GlobalPlugin.Login()
+
+		// 周期性写入
+		PeriodicWriteHis(analogCsvPath, digitalCsvPath)
+
+		// 登入
 		GlobalPlugin.Logout()
 	},
 }
@@ -1015,6 +1061,11 @@ func init() {
 	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
 	hisFastWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
 	hisFastWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
+
+	rootCmd.AddCommand(hisPeriodicWrite)
+	hisPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
+	hisPeriodicWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
+	hisPeriodicWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
