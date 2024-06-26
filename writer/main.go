@@ -569,7 +569,7 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 }
 
 // FastWriteRealtimeSection 极速写入实时断面
-func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
+func FastWriteRealtimeSection(crewNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
 	closeNum := 0
 	writeStart := time.Now()
 	sleepDurationSum := time.Duration(0)
@@ -577,19 +577,27 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 		select {
 		case section := <-fastAnalogCh:
 			wt := time.Now()
-			GlobalPlugin.WriteRtAnalog(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtAnalog(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-fastDigitalCh:
 			wt := time.Now()
-			GlobalPlugin.WriteRtDigital(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtDigital(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalAnalogCh:
 			wt := time.Now()
-			GlobalPlugin.WriteRtAnalog(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtAnalog(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalDigitalCh:
 			wt := time.Now()
-			GlobalPlugin.WriteRtDigital(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtDigital(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -610,7 +618,7 @@ func FastWriteRealtimeSection(closeChan chan struct{}, fastAnalogCh chan AnalogS
 }
 
 // FastWriteHisSection 极速写入历史断面
-func FastWriteHisSection(closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection) {
+func FastWriteHisSection(crewNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection) {
 	closeNum := 0
 	writeStart := time.Now()
 	sleepDurationSum := time.Duration(0)
@@ -618,11 +626,15 @@ func FastWriteHisSection(closeChan chan struct{}, analogCh chan AnalogSection, d
 		select {
 		case section := <-analogCh:
 			wt := time.Now()
-			GlobalPlugin.WriteHisAnalog(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteHisAnalog(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-digitalCh:
 			wt := time.Now()
-			GlobalPlugin.WriteHisDigital(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteHisDigital(i, section)
+			}
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -646,6 +658,7 @@ func FastWriteHisSection(closeChan chan struct{}, analogCh chan AnalogSection, d
 // regularWritePeriodic 常规写入周期, 单位毫秒
 // 返回值: 总时间, 写入时间, 睡眠时间
 func AsyncPeriodicWriteRtSection(
+	crewNumber int64,
 	wg *sync.WaitGroup,
 	rtnCh chan WriteRtn,
 	overloadProtectionWriteDuration int,
@@ -666,12 +679,16 @@ func AsyncPeriodicWriteRtSection(
 		start := time.Now()
 		select {
 		case section := <-analogCh:
-			GlobalPlugin.WriteRtAnalog(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtAnalog(i, section)
+			}
 		default:
 		}
 		select {
 		case section := <-digitalCh:
-			GlobalPlugin.WriteRtDigital(section)
+			for i := int64(0); i < crewNumber; i++ {
+				GlobalPlugin.WriteRtDigital(i, section)
+			}
 		default:
 		}
 		duration := time.Now().Sub(start)
@@ -720,16 +737,18 @@ func AsyncPeriodicWriteRtSection(
 }
 
 // StaticWrite 静态写入
-func StaticWrite(analogPath string, digitalPath string) {
+func StaticWrite(crewNumber int64, analogPath string, digitalPath string) {
 	writeStart := time.Now()
-	GlobalPlugin.WriteStaticAnalog(ReadStaticAnalogCsv(analogPath))
-	GlobalPlugin.WriteStaticDigital(ReadStaticDigitalCsv(digitalPath))
+	for i := int64(0); i < crewNumber; i++ {
+		GlobalPlugin.WriteStaticAnalog(i, ReadStaticAnalogCsv(analogPath))
+		GlobalPlugin.WriteStaticDigital(i, ReadStaticDigitalCsv(digitalPath))
+	}
 	writeEnd := time.Now()
 	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
 }
 
 // FastWriteRt 极速写入实时值
-func FastWriteRt(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+func FastWriteRt(crewNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
 	closeCh := make(chan struct{}, 4)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
 	fastDigitalCh := make(chan DigitalSection, CacheSize)
@@ -744,12 +763,12 @@ func FastWriteRt(fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnal
 
 	// 睡眠500毫秒, 等待协程加载缓存
 	time.Sleep(500 * time.Millisecond)
-	FastWriteRealtimeSection(closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
+	FastWriteRealtimeSection(crewNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
 	wg.Wait()
 }
 
 // PeriodicWriteRt 周期性写入实时值
-func PeriodicWriteRt(overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+func PeriodicWriteRt(crewNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
 	fastCloseCh := make(chan struct{}, 2)
 	normalCloseCh := make(chan struct{}, 2)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
@@ -770,11 +789,11 @@ func PeriodicWriteRt(overloadProtectionFlag bool, fastAnalogCsvPath string, fast
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
-		go AsyncPeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go AsyncPeriodicWriteRtSection(wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteRtSection(crewNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
+		go AsyncPeriodicWriteRtSection(crewNumber, wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
 	} else {
-		go AsyncPeriodicWriteRtSection(wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go AsyncPeriodicWriteRtSection(wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteRtSection(crewNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
+		go AsyncPeriodicWriteRtSection(crewNumber, wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
 	}
 	wgWrite.Wait()
 	wgRead.Wait()
@@ -793,7 +812,7 @@ func PeriodicWriteRt(overloadProtectionFlag bool, fastAnalogCsvPath string, fast
 }
 
 // FastWriteHis 极速写历史
-func FastWriteHis(analogCsvPath string, digitalCsvPath string) {
+func FastWriteHis(crewNumber int64, analogCsvPath string, digitalCsvPath string) {
 	closeCh := make(chan struct{}, 4)
 	analogCh := make(chan AnalogSection, CacheSize)
 	digitalCh := make(chan DigitalSection, CacheSize)
@@ -804,12 +823,12 @@ func FastWriteHis(analogCsvPath string, digitalCsvPath string) {
 
 	// 睡眠500毫秒, 等待协程加载缓存
 	time.Sleep(500 * time.Millisecond)
-	FastWriteHisSection(closeCh, analogCh, digitalCh)
+	FastWriteHisSection(crewNumber, closeCh, analogCh, digitalCh)
 	wg.Wait()
 }
 
 // PeriodicWriteHis 周期性写历史
-func PeriodicWriteHis(analogCsvPath string, digitalCsvPath string) {
+func PeriodicWriteHis(crewNumber int64, analogCsvPath string, digitalCsvPath string) {
 	normalCloseCh := make(chan struct{}, 2)
 	normalAnalogCh := make(chan AnalogSection, CacheSize)
 	normalDigitalCh := make(chan DigitalSection, CacheSize)
@@ -823,7 +842,7 @@ func PeriodicWriteHis(analogCsvPath string, digitalCsvPath string) {
 	rtnCh := make(chan WriteRtn, 1)
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(1)
-	go AsyncPeriodicWriteRtSection(wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+	go AsyncPeriodicWriteRtSection(crewNumber, wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
 	wgWrite.Wait()
 	wgRead.Wait()
 
@@ -852,28 +871,28 @@ func (df *WritePlugin) Logout() {
 	C.dy_logout(df.handle)
 }
 
-func (df *WritePlugin) WriteRtAnalog(section AnalogSection) {
-	C.dy_write_rt_analog(df.handle, C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteRtAnalog(crewId int64, section AnalogSection) {
+	C.dy_write_rt_analog(df.handle, C.int64_t(crewId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteRtDigital(section DigitalSection) {
-	C.dy_write_rt_digital(df.handle, C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteRtDigital(crewId int64, section DigitalSection) {
+	C.dy_write_rt_digital(df.handle, C.int64_t(crewId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteHisAnalog(section AnalogSection) {
-	C.dy_write_his_analog(df.handle, C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteHisAnalog(crewId int64, section AnalogSection) {
+	C.dy_write_his_analog(df.handle, C.int64_t(crewId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteHisDigital(section DigitalSection) {
-	C.dy_write_his_digital(df.handle, C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteHisDigital(crewId int64, section DigitalSection) {
+	C.dy_write_his_digital(df.handle, C.int64_t(crewId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteStaticAnalog(section StaticAnalogSection) {
-	C.dy_write_static_analog(df.handle, (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteStaticAnalog(crewId int64, section StaticAnalogSection) {
+	C.dy_write_static_analog(df.handle, C.int64_t(crewId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteStaticDigital(section StaticDigitalSection) {
-	C.dy_write_static_digital(df.handle, (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
+func (df *WritePlugin) WriteStaticDigital(crewId int64, section StaticDigitalSection) {
+	C.dy_write_static_digital(df.handle, C.int64_t(crewId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
 var GlobalPlugin *WritePlugin = nil
@@ -932,6 +951,7 @@ var staticWrite = &cobra.Command{
 		pluginPath, _ := cmd.Flags().GetString("plugin")
 		staticAnalogCsvPath, _ := cmd.Flags().GetString("static_analog")
 		staticDigitalCsvPath, _ := cmd.Flags().GetString("static_digital")
+		crewNumber, _ := cmd.Flags().GetInt64("crew_number")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -940,7 +960,7 @@ var staticWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 静态写入
-		StaticWrite(staticAnalogCsvPath, staticDigitalCsvPath)
+		StaticWrite(crewNumber, staticAnalogCsvPath, staticDigitalCsvPath)
 
 		// 登出
 		GlobalPlugin.Logout()
@@ -956,6 +976,7 @@ var rtFastWrite = &cobra.Command{
 		fastDigitalCsvPath, _ := cmd.Flags().GetString("rt_fast_digital")
 		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
+		crewNumber, _ := cmd.Flags().GetInt64("crew_number")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -964,7 +985,7 @@ var rtFastWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 极速写入
-		FastWriteRt(fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+		FastWriteRt(crewNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 
 		// 登出
 		GlobalPlugin.Logout()
@@ -978,6 +999,7 @@ var hisFastWrite = &cobra.Command{
 		pluginPath, _ := cmd.Flags().GetString("plugin")
 		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
 		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
+		crewNumber, _ := cmd.Flags().GetInt64("crew_number")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -986,7 +1008,7 @@ var hisFastWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 极速写入历史
-		FastWriteHis(analogCsvPath, digitalCsvPath)
+		FastWriteHis(crewNumber, analogCsvPath, digitalCsvPath)
 
 		// 登出
 		GlobalPlugin.Logout()
@@ -1000,6 +1022,7 @@ var hisPeriodicWrite = &cobra.Command{
 		pluginPath, _ := cmd.Flags().GetString("plugin")
 		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
 		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
+		crewNumber, _ := cmd.Flags().GetInt64("crew_number")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1008,7 +1031,7 @@ var hisPeriodicWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 周期性写入
-		PeriodicWriteHis(analogCsvPath, digitalCsvPath)
+		PeriodicWriteHis(crewNumber, analogCsvPath, digitalCsvPath)
 
 		// 登入
 		GlobalPlugin.Logout()
@@ -1025,6 +1048,7 @@ var rtPeriodicWrite = &cobra.Command{
 		fastDigitalCsvPath, _ := cmd.Flags().GetString("rt_fast_digital")
 		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
+		crewNumber, _ := cmd.Flags().GetInt64("crew_number")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1033,7 +1057,7 @@ var rtPeriodicWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 周期性写入
-		PeriodicWriteRt(overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+		PeriodicWriteRt(crewNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 
 		// 登入
 		GlobalPlugin.Logout()
@@ -1049,6 +1073,7 @@ func init() {
 	staticWrite.Flags().StringP("plugin", "", "", "plugin path")
 	staticWrite.Flags().StringP("static_analog", "", "", "static analog csv path")
 	staticWrite.Flags().StringP("static_digital", "", "", "static digital csv path")
+	staticWrite.Flags().Int64P("crew_number", "", 1, "crew number")
 
 	rootCmd.AddCommand(rtFastWrite)
 	rtFastWrite.Flags().StringP("plugin", "", "", "plugin path")
@@ -1056,16 +1081,19 @@ func init() {
 	rtFastWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
 	rtFastWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
 	rtFastWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
+	rtFastWrite.Flags().Int64P("crew_number", "", 1, "crew number")
 
 	rootCmd.AddCommand(hisFastWrite)
 	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
 	hisFastWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
 	hisFastWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
+	hisFastWrite.Flags().Int64P("crew_number", "", 1, "crew number")
 
 	rootCmd.AddCommand(hisPeriodicWrite)
 	hisPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
 	hisPeriodicWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
 	hisPeriodicWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
+	hisPeriodicWrite.Flags().Int64P("crew_number", "", 1, "crew number")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
@@ -1074,6 +1102,7 @@ func init() {
 	rtPeriodicWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
 	rtPeriodicWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
 	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
+	rtPeriodicWrite.Flags().Int64P("crew_number", "", 1, "crew number")
 }
 
 func Execute() {
