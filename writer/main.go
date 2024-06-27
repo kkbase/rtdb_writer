@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
+	"gonum.org/v1/gonum/stat"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,17 +29,22 @@ const OverloadProtectionWriteDuration = 2000
 // OverloadProtectionWritePeriodic 过载保护写入周期, 50毫秒
 const OverloadProtectionWritePeriodic = 50
 
-// FastRegularWritePeriodic 块采点写入周期, 1毫秒
+// FastRegularWritePeriodic 快采点写入周期, 1毫秒
 const FastRegularWritePeriodic = 1
 
 // NormalRegularWritePeriodic 普通点写入周期, 400毫秒
 const NormalRegularWritePeriodic = 400
 
 type WriteRtn struct {
-	AllTime   time.Duration
-	WriteTime time.Duration
-	SleepTime time.Duration
-	OtherTime time.Duration
+	AllTime     time.Duration
+	WriteTime   time.Duration
+	SleepTime   time.Duration
+	OtherTime   time.Duration
+	AverageTime time.Duration
+	P99         time.Duration
+	P90         time.Duration
+	MaxTime     time.Duration
+	MinTime     time.Duration
 }
 
 type AnalogSection struct {
@@ -663,6 +670,7 @@ func AsyncPeriodicWriteRtSection(
 	allStart := time.Now()
 	writeDurationSum := time.Duration(0)
 	sleepDurationSum := time.Duration(0)
+	writeDurationList := make([]float64, 0)
 	for {
 		// 写入数据
 		start := time.Now()
@@ -677,6 +685,7 @@ func AsyncPeriodicWriteRtSection(
 		default:
 		}
 		duration := time.Now().Sub(start)
+		writeDurationList = append(writeDurationList, float64(duration))
 		writeDurationSum += duration
 
 		// 全部写完, 退出循环
@@ -712,12 +721,25 @@ func AsyncPeriodicWriteRtSection(
 	writeTime := writeDurationSum
 	sleepTime := sleepDurationSum
 	otherTime := allTime - writeTime - sleepTime
+	averageTime := time.Duration(float64(writeTime) / float64(len(writeDurationList)))
+	sort.Slice(writeDurationList, func(i, j int) bool {
+		return writeDurationList[i] < writeDurationList[j]
+	})
+	p99 := time.Duration(stat.Quantile(0.99, stat.Empirical, writeDurationList, nil))
+	p90 := time.Duration(stat.Quantile(0.90, stat.Empirical, writeDurationList, nil))
+	maxTime := time.Duration(writeDurationList[0])
+	minTime := time.Duration(writeDurationList[len(writeDurationList)-1])
 
 	rtnCh <- WriteRtn{
-		AllTime:   allTime,
-		WriteTime: writeTime,
-		SleepTime: sleepTime,
-		OtherTime: otherTime,
+		AllTime:     allTime,
+		WriteTime:   writeTime,
+		SleepTime:   sleepTime,
+		OtherTime:   otherTime,
+		AverageTime: averageTime,
+		P99:         p99,
+		P90:         p90,
+		MinTime:     minTime,
+		MaxTime:     maxTime,
 	}
 }
 
@@ -744,8 +766,8 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh)
 	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh)
 
-	// 睡眠500毫秒, 等待协程加载缓存
-	time.Sleep(500 * time.Millisecond)
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2 * time.Second)
 	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
 	wg.Wait()
 }
@@ -765,8 +787,8 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	go ReadAnalogCsv(wgRead, normalCloseCh, normalAnalogCsvPath, normalAnalogCh)
 	go ReadDigitalCsv(wgRead, normalCloseCh, normalDigitalCsvPath, normalDigitalCh)
 
-	// 睡眠500毫秒, 等待协程加载缓存
-	time.Sleep(500 * time.Millisecond)
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
 	fastRtnCh := make(chan WriteRtn, 1)
 	normalRtnCh := make(chan WriteRtn, 1)
 	wgWrite := new(sync.WaitGroup)
@@ -788,8 +810,28 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	} else {
 		fmt.Println("周期性写入实时值(关闭过载保护):")
 	}
-	fmt.Println("快采点 - 总耗时:", fastRtn.AllTime, "写入耗时:", fastRtn.WriteTime, "睡眠耗时:", fastRtn.SleepTime, "其他耗时:", fastRtn.OtherTime)
-	fmt.Println("普通点 - 总耗时:", normalRtn.AllTime, "写入耗时:", normalRtn.WriteTime, "睡眠耗时:", normalRtn.SleepTime, "其他耗时:", normalRtn.OtherTime)
+	fmt.Println(
+		"快采点 - 总耗时:", fastRtn.AllTime,
+		",写入耗时:", fastRtn.WriteTime,
+		",睡眠耗时:", fastRtn.SleepTime,
+		",其他耗时:", fastRtn.OtherTime,
+		"\n单次写入平均耗时", fastRtn.AverageTime,
+		",单次写入最大耗时", fastRtn.MinTime,
+		",单次写入最小耗时", fastRtn.MaxTime,
+		",单次写入P99", fastRtn.P99,
+		",单次写入P90", fastRtn.P90,
+	)
+	fmt.Println(
+		"\n普通点 - 总耗时:", normalRtn.AllTime,
+		",写入耗时:", normalRtn.WriteTime,
+		",睡眠耗时:", normalRtn.SleepTime,
+		",其他耗时:", normalRtn.OtherTime,
+		"\n单次写入平均耗时", fastRtn.AverageTime,
+		",单次写入最大耗时", fastRtn.MinTime,
+		",单次写入最小耗时", fastRtn.MaxTime,
+		",单次写入P99", fastRtn.P99,
+		",单次写入P90", fastRtn.P90,
+	)
 	close(fastRtnCh)
 	close(normalRtnCh)
 }
@@ -804,8 +846,8 @@ func FastWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath string)
 	go ReadAnalogCsv(wg, closeCh, analogCsvPath, analogCh)
 	go ReadDigitalCsv(wg, closeCh, digitalCsvPath, digitalCh)
 
-	// 睡眠500毫秒, 等待协程加载缓存
-	time.Sleep(500 * time.Millisecond)
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
 	FastWriteHisSection(unitNumber, closeCh, analogCh, digitalCh)
 	wg.Wait()
 }
@@ -820,8 +862,8 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	go ReadAnalogCsv(wgRead, normalCloseCh, analogCsvPath, normalAnalogCh)
 	go ReadDigitalCsv(wgRead, normalCloseCh, digitalCsvPath, normalDigitalCh)
 
-	// 睡眠500毫秒, 等待协程加载缓存
-	time.Sleep(500 * time.Millisecond)
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
 	rtnCh := make(chan WriteRtn, 1)
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(1)
@@ -830,7 +872,17 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	wgRead.Wait()
 
 	rtn := <-rtnCh
-	fmt.Println("周期性写入历史值: 普通点 - 总耗时:", rtn.AllTime, "写入耗时:", rtn.WriteTime, "睡眠耗时:", rtn.SleepTime, "其他耗时:", rtn.OtherTime)
+	fmt.Println(
+		"周期性写入历史值: 普通点 - 总耗时:", rtn.AllTime,
+		",写入耗时:", rtn.WriteTime,
+		",睡眠耗时:", rtn.SleepTime,
+		",其他耗时:", rtn.OtherTime,
+		"\n单次写入平均耗时", rtn.AverageTime,
+		",单次写入最大耗时", rtn.MinTime,
+		",单次写入最小耗时", rtn.MaxTime,
+		",单次写入P99", rtn.P99,
+		",单次写入P90", rtn.P90,
+	)
 	close(rtnCh)
 }
 
@@ -1075,7 +1127,7 @@ var rtFastWrite = &cobra.Command{
 		// 登入
 		GlobalPlugin.Login()
 
-		// 极速写入
+		// 极速写入实时值
 		FastWriteRt(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 
 		// 登出
