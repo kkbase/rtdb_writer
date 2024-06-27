@@ -810,28 +810,13 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	} else {
 		fmt.Println("周期性写入实时值(关闭过载保护):")
 	}
-	fmt.Println(
-		"快采点 - 总耗时:", fastRtn.AllTime,
-		",写入耗时:", fastRtn.WriteTime,
-		",睡眠耗时:", fastRtn.SleepTime,
-		",其他耗时:", fastRtn.OtherTime,
-		"\n单次写入平均耗时", fastRtn.AverageTime,
-		",单次写入最大耗时", fastRtn.MinTime,
-		",单次写入最小耗时", fastRtn.MaxTime,
-		",单次写入P99", fastRtn.P99,
-		",单次写入P90", fastRtn.P90,
-	)
-	fmt.Println(
-		"\n普通点 - 总耗时:", normalRtn.AllTime,
-		",写入耗时:", normalRtn.WriteTime,
-		",睡眠耗时:", normalRtn.SleepTime,
-		",其他耗时:", normalRtn.OtherTime,
-		"\n单次写入平均耗时", fastRtn.AverageTime,
-		",单次写入最大耗时", fastRtn.MinTime,
-		",单次写入最小耗时", fastRtn.MaxTime,
-		",单次写入P99", fastRtn.P99,
-		",单次写入P90", fastRtn.P90,
-	)
+
+	fmt.Printf("快采点 - 总耗时 :%v, 写入耗时:%v, 睡眠耗时:%v, 其他耗时:%v\n单次写入平均耗时:%v, 单次写入最大耗时:%v, 单次写入最小耗时:%v, 单次写入P99:%v, 单次写入P90:%v\n",
+		fastRtn.AllTime, fastRtn.WriteTime, fastRtn.SleepTime, fastRtn.OtherTime, fastRtn.AverageTime, fastRtn.MinTime, fastRtn.MaxTime, fastRtn.P99, fastRtn.P90)
+	fmt.Println()
+	fmt.Printf("普通点 - 总耗时 :%v, 写入耗时:%v, 睡眠耗时:%v, 其他耗时:%v\n单次写入平均耗时:%v, 单次写入最大耗时:%v, 单次写入最小耗时:%v, 单次写入P99:%v, 单次写入P90:%v\n",
+		normalRtn.AllTime, normalRtn.WriteTime, normalRtn.SleepTime, normalRtn.OtherTime, normalRtn.AverageTime, normalRtn.MinTime, normalRtn.MaxTime, normalRtn.P99, normalRtn.P90)
+
 	close(fastRtnCh)
 	close(normalRtnCh)
 }
@@ -872,16 +857,9 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	wgRead.Wait()
 
 	rtn := <-rtnCh
-	fmt.Println(
-		"周期性写入历史值: 普通点 - 总耗时:", rtn.AllTime,
-		",写入耗时:", rtn.WriteTime,
-		",睡眠耗时:", rtn.SleepTime,
-		",其他耗时:", rtn.OtherTime,
-		"\n单次写入平均耗时", rtn.AverageTime,
-		",单次写入最大耗时", rtn.MinTime,
-		",单次写入最小耗时", rtn.MaxTime,
-		",单次写入P99", rtn.P99,
-		",单次写入P90", rtn.P90,
+	fmt.Printf(
+		"周期性写入历史值: 总耗时:%v, 写入耗时:%v, 睡眠耗时:%v, 其他耗时:%v\n单次写入平均耗时:%v, 单次写入最大耗时:%v, 单次写入最小耗时:%v, 单次写入P99:%v, 单次写入P90:%v\n",
+		rtn.AllTime, rtn.WriteTime, rtn.SleepTime, rtn.OtherTime, rtn.AverageTime, rtn.MinTime, rtn.MaxTime, rtn.P99, rtn.P90,
 	)
 	close(rtnCh)
 }
