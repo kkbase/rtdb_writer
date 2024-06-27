@@ -577,27 +577,19 @@ func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAna
 		select {
 		case section := <-fastAnalogCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtAnalog(i, section)
-			}
+			GlobalPlugin.WriteRtAnalog(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-fastDigitalCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtDigital(i, section)
-			}
+			GlobalPlugin.WriteRtDigital(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalAnalogCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtAnalog(i, section)
-			}
+			GlobalPlugin.WriteRtAnalog(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-normalDigitalCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtDigital(i, section)
-			}
+			GlobalPlugin.WriteRtDigital(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -626,15 +618,11 @@ func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh cha
 		select {
 		case section := <-analogCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteHisAnalog(i, section)
-			}
+			GlobalPlugin.WriteHisAnalog(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case section := <-digitalCh:
 			wt := time.Now()
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteHisDigital(i, section)
-			}
+			GlobalPlugin.WriteHisDigital(unitNumber, section)
 			sleepDurationSum += time.Now().Sub(wt)
 		case <-closeChan:
 			closeNum++
@@ -680,16 +668,12 @@ func AsyncPeriodicWriteRtSection(
 		start := time.Now()
 		select {
 		case section := <-analogCh:
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtAnalog(i, section)
-			}
+			GlobalPlugin.WriteRtAnalog(unitNumber, section)
 		default:
 		}
 		select {
 		case section := <-digitalCh:
-			for i := int64(0); i < unitNumber; i++ {
-				GlobalPlugin.WriteRtDigital(i, section)
-			}
+			GlobalPlugin.WriteRtDigital(unitNumber, section)
 		default:
 		}
 		duration := time.Now().Sub(start)
@@ -740,10 +724,8 @@ func AsyncPeriodicWriteRtSection(
 // StaticWrite 静态写入
 func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 	writeStart := time.Now()
-	for i := int64(0); i < unitNumber; i++ {
-		GlobalPlugin.WriteStaticAnalog(i, ReadStaticAnalogCsv(analogPath))
-		GlobalPlugin.WriteStaticDigital(i, ReadStaticDigitalCsv(digitalPath))
-	}
+	GlobalPlugin.WriteStaticAnalog(unitNumber, ReadStaticAnalogCsv(analogPath))
+	GlobalPlugin.WriteStaticDigital(unitNumber, ReadStaticDigitalCsv(digitalPath))
 	writeEnd := time.Now()
 	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
 }
@@ -872,27 +854,135 @@ func (df *WritePlugin) Logout() {
 	C.dy_logout(df.handle)
 }
 
-func (df *WritePlugin) WriteRtAnalog(unitId int64, section AnalogSection) {
+func (df *WritePlugin) WriteRtAnalog(unitNumber int64, section AnalogSection) {
+	if unitNumber == 1 {
+		df.SyncWriteRtAnalog(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteRtAnalog(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteRtDigital(unitNumber int64, section DigitalSection) {
+	if unitNumber == 1 {
+		df.SyncWriteRtDigital(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteRtDigital(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteHisAnalog(unitNumber int64, section AnalogSection) {
+	if unitNumber == 1 {
+		df.SyncWriteHisAnalog(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteHisAnalog(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteHisDigital(unitNumber int64, section DigitalSection) {
+	if unitNumber == 1 {
+		df.SyncWriteHisDigital(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteHisDigital(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteStaticAnalog(unitNumber int64, section StaticAnalogSection) {
+	if unitNumber == 1 {
+		df.SyncWriteStaticAnalog(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteStaticAnalog(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteStaticDigital(unitNumber int64, section StaticDigitalSection) {
+	if unitNumber == 1 {
+		df.SyncWriteStaticDigital(0, section)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteStaticDigital(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) SyncWriteRtAnalog(unitId int64, section AnalogSection) {
 	C.dy_write_rt_analog(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteRtDigital(unitId int64, section DigitalSection) {
+func (df *WritePlugin) SyncWriteRtDigital(unitId int64, section DigitalSection) {
 	C.dy_write_rt_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteHisAnalog(unitId int64, section AnalogSection) {
+func (df *WritePlugin) SyncWriteHisAnalog(unitId int64, section AnalogSection) {
 	C.dy_write_his_analog(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteHisDigital(unitId int64, section DigitalSection) {
+func (df *WritePlugin) SyncWriteHisDigital(unitId int64, section DigitalSection) {
 	C.dy_write_his_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteStaticAnalog(unitId int64, section StaticAnalogSection) {
+func (df *WritePlugin) SyncWriteStaticAnalog(unitId int64, section StaticAnalogSection) {
 	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) WriteStaticDigital(unitId int64, section StaticDigitalSection) {
+func (df *WritePlugin) SyncWriteStaticDigital(unitId int64, section StaticDigitalSection) {
+	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteRtAnalog(wg *sync.WaitGroup, unitId int64, section AnalogSection) {
+	defer wg.Done()
+	C.dy_write_rt_analog(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteRtDigital(wg *sync.WaitGroup, unitId int64, section DigitalSection) {
+	defer wg.Done()
+	C.dy_write_rt_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteHisAnalog(wg *sync.WaitGroup, unitId int64, section AnalogSection) {
+	defer wg.Done()
+	C.dy_write_his_analog(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteHisDigital(wg *sync.WaitGroup, unitId int64, section DigitalSection) {
+	defer wg.Done()
+	C.dy_write_his_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteStaticAnalog(wg *sync.WaitGroup, unitId int64, section StaticAnalogSection) {
+	defer wg.Done()
+	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteStaticDigital(wg *sync.WaitGroup, unitId int64, section StaticDigitalSection) {
+	defer wg.Done()
 	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
