@@ -647,13 +647,13 @@ func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh cha
 	fmt.Println("极速写入历史值 - 总耗时: ", allTime, "写入耗时:", sleepDurationSum, "其他耗时:", allTime-sleepDurationSum)
 }
 
-// AsyncPeriodicWriteRtSection 周期性写入断面(实时/历史通用)
+// AsyncPeriodicWriteSection 周期性写入断面(实时/历史通用)
 // unitNumber int64 机组数量
 // overloadProtectionWriteDuration 过载保护持续时间, 单位毫秒
 // overloadProtectionWritePeriodic 过载保护写入周期, 单位毫秒
 // regularWritePeriodic 常规写入周期, 单位毫秒
 // 返回值: 总时间, 写入时间, 睡眠时间
-func AsyncPeriodicWriteRtSection(
+func AsyncPeriodicWriteSection(
 	unitNumber int64,
 	wg *sync.WaitGroup,
 	rtnCh chan WriteRtn,
@@ -663,6 +663,7 @@ func AsyncPeriodicWriteRtSection(
 	closeChan chan struct{},
 	analogCh chan AnalogSection,
 	digitalCh chan DigitalSection,
+	isRt bool,
 ) {
 	defer wg.Done()
 
@@ -676,12 +677,20 @@ func AsyncPeriodicWriteRtSection(
 		start := time.Now()
 		select {
 		case section := <-analogCh:
-			GlobalPlugin.WriteRtAnalog(unitNumber, section)
+			if isRt {
+				GlobalPlugin.WriteRtAnalog(unitNumber, section)
+			} else {
+				GlobalPlugin.WriteHisAnalog(unitNumber, section)
+			}
 		default:
 		}
 		select {
 		case section := <-digitalCh:
-			GlobalPlugin.WriteRtDigital(unitNumber, section)
+			if isRt {
+				GlobalPlugin.WriteRtDigital(unitNumber, section)
+			} else {
+				GlobalPlugin.WriteHisDigital(unitNumber, section)
+			}
 		default:
 		}
 		duration := time.Now().Sub(start)
@@ -794,11 +803,11 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
-		go AsyncPeriodicWriteRtSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go AsyncPeriodicWriteRtSection(unitNumber, wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true)
 	} else {
-		go AsyncPeriodicWriteRtSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh)
-		go AsyncPeriodicWriteRtSection(unitNumber, wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true)
 	}
 	wgWrite.Wait()
 	wgRead.Wait()
@@ -852,7 +861,7 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	rtnCh := make(chan WriteRtn, 1)
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(1)
-	go AsyncPeriodicWriteRtSection(unitNumber, wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh)
+	go AsyncPeriodicWriteSection(unitNumber, wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, false)
 	wgWrite.Wait()
 	wgRead.Wait()
 
