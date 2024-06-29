@@ -1,6 +1,7 @@
 package main
 
 // #cgo CFLAGS: -I../plugin
+// #include <stdlib.h>
 // #include "dylib.h"
 // #include "write_plugin.h"
 import "C"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 // CacheSize  缓存队列大小
@@ -664,6 +666,7 @@ func AsyncPeriodicWriteSection(
 	analogCh chan AnalogSection,
 	digitalCh chan DigitalSection,
 	isRt bool,
+	fastCache bool,
 ) {
 	defer wg.Done()
 
@@ -672,50 +675,91 @@ func AsyncPeriodicWriteSection(
 	writeDurationSum := time.Duration(0)
 	sleepDurationSum := time.Duration(0)
 	writeDurationList := make([]float64, 0)
+
 	for {
-		// 写入数据
-		start := time.Now()
-		select {
-		case section := <-analogCh:
-			if isRt {
-				GlobalPlugin.WriteRtAnalog(unitNumber, section)
-			} else {
-				GlobalPlugin.WriteHisAnalog(unitNumber, section)
+		if fastCache {
+			analogList := make([]AnalogSection, 0)
+			digitalList := make([]DigitalSection, 0)
+			for i := 0; i < 100; i++ {
+				select {
+				case section := <-analogCh:
+					analogList = append(analogList, section)
+				}
+				select {
+				case section := <-digitalCh:
+					digitalList = append(digitalList, section)
+				}
+
+				// 全部写完, 退出循环
+				if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+					break
+				}
 			}
-		default:
-		}
-		select {
-		case section := <-digitalCh:
-			if isRt {
-				GlobalPlugin.WriteRtDigital(unitNumber, section)
-			} else {
-				GlobalPlugin.WriteHisDigital(unitNumber, section)
+
+			start := time.Now()
+
+			GlobalPlugin.WriteRtAnalogList(unitNumber, analogList)
+			GlobalPlugin.WriteRtDigitalList(unitNumber, digitalList)
+
+			duration := time.Now().Sub(start)
+			writeDurationSum += duration
+			writeDurationList = append(writeDurationList, float64(duration))
+			// 全部写完, 退出循环
+			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+				break
 			}
-		default:
-		}
-		duration := time.Now().Sub(start)
-		writeDurationList = append(writeDurationList, float64(duration))
-		writeDurationSum += duration
 
-		// 全部写完, 退出循环
-		if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
-			break
-		}
-
-		// 睡眠剩余时间
-		if sum < overloadProtectionWriteDuration {
-			sum += overloadProtectionWritePeriodic
-
-			if duration < time.Duration(overloadProtectionWritePeriodic)*time.Millisecond {
-				sleepDuration := time.Duration(overloadProtectionWritePeriodic)*time.Millisecond - duration
+			// 睡眠
+			if duration < time.Duration(regularWritePeriodic)*time.Millisecond*100 {
+				sleepDuration := time.Duration(regularWritePeriodic)*time.Millisecond*100 - duration
 				sleepDurationSum += sleepDuration
 				time.Sleep(sleepDuration)
 			}
 		} else {
-			if duration < time.Duration(regularWritePeriodic)*time.Millisecond {
-				sleepDuration := time.Duration(regularWritePeriodic)*time.Millisecond - duration
-				sleepDurationSum += sleepDuration
-				time.Sleep(sleepDuration)
+			// 写入数据
+			start := time.Now()
+			select {
+			case section := <-analogCh:
+				if isRt {
+					GlobalPlugin.WriteRtAnalog(unitNumber, section)
+				} else {
+					GlobalPlugin.WriteHisAnalog(unitNumber, section)
+				}
+			default:
+			}
+			select {
+			case section := <-digitalCh:
+				if isRt {
+					GlobalPlugin.WriteRtDigital(unitNumber, section)
+				} else {
+					GlobalPlugin.WriteHisDigital(unitNumber, section)
+				}
+			default:
+			}
+			duration := time.Now().Sub(start)
+			writeDurationList = append(writeDurationList, float64(duration))
+			writeDurationSum += duration
+
+			// 全部写完, 退出循环
+			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+				break
+			}
+
+			// 睡眠剩余时间
+			if sum < overloadProtectionWriteDuration {
+				sum += overloadProtectionWritePeriodic
+
+				if duration < time.Duration(overloadProtectionWritePeriodic)*time.Millisecond {
+					sleepDuration := time.Duration(overloadProtectionWritePeriodic)*time.Millisecond - duration
+					sleepDurationSum += sleepDuration
+					time.Sleep(sleepDuration)
+				}
+			} else {
+				if duration < time.Duration(regularWritePeriodic)*time.Millisecond {
+					sleepDuration := time.Duration(regularWritePeriodic)*time.Millisecond - duration
+					sleepDurationSum += sleepDuration
+					time.Sleep(sleepDuration)
+				}
 			}
 		}
 	}
@@ -782,7 +826,7 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 }
 
 // PeriodicWriteRt 周期性写入实时值
-func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool) {
 	fastCloseCh := make(chan struct{}, 2)
 	normalCloseCh := make(chan struct{}, 2)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
@@ -803,11 +847,11 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true)
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, fastCache)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false)
 	} else {
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true)
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, fastRtnCh, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, fastCache)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, normalRtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false)
 	}
 	wgWrite.Wait()
 	wgRead.Wait()
@@ -861,7 +905,7 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	rtnCh := make(chan WriteRtn, 1)
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(1)
-	go AsyncPeriodicWriteSection(unitNumber, wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, false)
+	go AsyncPeriodicWriteSection(unitNumber, wgWrite, rtnCh, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, false, false)
 	wgWrite.Wait()
 	wgRead.Wait()
 
@@ -901,6 +945,32 @@ func (df *WritePlugin) WriteRtAnalog(unitNumber int64, section AnalogSection) {
 		wg.Add(int(unitNumber))
 		for i := int64(0); i < unitNumber; i++ {
 			go df.AsyncWriteRtAnalog(wg, i, section)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteRtAnalogList(unitNumber int64, sections []AnalogSection) {
+	if unitNumber == 1 {
+		df.SyncWriteRtAnalogList(unitNumber, sections)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteRtAnalogList(wg, i, sections)
+		}
+		wg.Wait()
+	}
+}
+
+func (df *WritePlugin) WriteRtDigitalList(unitNumber int64, sections []DigitalSection) {
+	if unitNumber == 1 {
+		df.SyncWriteRtDigitalList(unitNumber, sections)
+	} else {
+		wg := new(sync.WaitGroup)
+		wg.Add(int(unitNumber))
+		for i := int64(0); i < unitNumber; i++ {
+			go df.AsyncWriteRtDigitalList(wg, i, sections)
 		}
 		wg.Wait()
 	}
@@ -979,6 +1049,70 @@ func (df *WritePlugin) SyncWriteRtDigital(unitId int64, section DigitalSection) 
 	C.dy_write_rt_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
+func (df *WritePlugin) SyncWriteRtAnalogList(unitId int64, sections []AnalogSection) {
+	// 初始化 C 数组
+	timeList := make([]C.int64_t, 0)
+	analogArrayList := make([]*C.Analog, 0)
+	countList := make([]C.int64_t, 0)
+
+	for i := range sections {
+		timeList = append(timeList, C.int64_t(sections[i].Time))
+
+		// 分配 C 内存并将 Go 数据复制到 C 内存中
+		analogData := C.malloc(C.size_t(len(sections[i].Data)) * C.size_t(unsafe.Sizeof(C.Analog{})))
+		if analogData == nil {
+			panic("C.malloc failed")
+		}
+		for j := range sections[i].Data {
+			(*[1 << 30]C.Analog)(analogData)[j] = C.Analog(sections[i].Data[j])
+		}
+		analogArrayList = append(analogArrayList, (*C.Analog)(analogData))
+		countList = append(countList, C.int64_t(len(sections[i].Data)))
+	}
+
+	// 调用 C 函数，传递结构体指针数组
+	C.dy_write_rt_analog_list(df.handle, C.int64_t(unitId), &timeList[0], &analogArrayList[0], &countList[0], C.int64_t(len(sections)))
+
+	// 释放 C 分配的内存
+	for i := range analogArrayList {
+		if analogArrayList[i] != nil {
+			C.free(unsafe.Pointer(analogArrayList[i]))
+		}
+	}
+}
+
+func (df *WritePlugin) SyncWriteRtDigitalList(unitId int64, sections []DigitalSection) {
+	// 初始化 C 数组
+	timeList := make([]C.int64_t, 0)
+	digitalArrayList := make([]*C.Digital, 0)
+	countList := make([]C.int64_t, 0)
+
+	for i := range sections {
+		timeList = append(timeList, C.int64_t(sections[i].Time))
+
+		// 分配 C 内存并将 Go 数据复制到 C 内存中
+		digitalData := C.malloc(C.size_t(len(sections[i].Data)) * C.size_t(unsafe.Sizeof(C.Digital{})))
+		if digitalData == nil {
+			panic("C.malloc failed")
+		}
+		for j := range sections[i].Data {
+			(*[1 << 30]C.Digital)(digitalData)[j] = C.Digital(sections[i].Data[j])
+		}
+		digitalArrayList = append(digitalArrayList, (*C.Digital)(digitalData))
+		countList = append(countList, C.int64_t(len(sections[i].Data)))
+	}
+
+	// 调用 C 函数，传递结构体指针数组
+	C.dy_write_rt_digital_list(df.handle, C.int64_t(unitId), &timeList[0], &digitalArrayList[0], &countList[0], C.int64_t(len(sections)))
+
+	// 释放 C 分配的内存
+	for i := range digitalArrayList {
+		if digitalArrayList[i] != nil {
+			C.free(unsafe.Pointer(digitalArrayList[i]))
+		}
+	}
+}
+
 func (df *WritePlugin) SyncWriteHisAnalog(unitId int64, section AnalogSection) {
 	C.dy_write_his_analog(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
@@ -1003,6 +1137,16 @@ func (df *WritePlugin) AsyncWriteRtAnalog(wg *sync.WaitGroup, unitId int64, sect
 func (df *WritePlugin) AsyncWriteRtDigital(wg *sync.WaitGroup, unitId int64, section DigitalSection) {
 	defer wg.Done()
 	C.dy_write_rt_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
+}
+
+func (df *WritePlugin) AsyncWriteRtAnalogList(wg *sync.WaitGroup, unitId int64, sections []AnalogSection) {
+	defer wg.Done()
+	df.SyncWriteRtAnalogList(unitId, sections)
+}
+
+func (df *WritePlugin) AsyncWriteRtDigitalList(wg *sync.WaitGroup, unitId int64, sections []DigitalSection) {
+	defer wg.Done()
+	df.SyncWriteRtDigitalList(unitId, sections)
 }
 
 func (df *WritePlugin) AsyncWriteHisAnalog(wg *sync.WaitGroup, unitId int64, section AnalogSection) {
@@ -1179,6 +1323,7 @@ var rtPeriodicWrite = &cobra.Command{
 		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
+		fastCache, _ := cmd.Flags().GetBool("fast_cache")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1187,7 +1332,7 @@ var rtPeriodicWrite = &cobra.Command{
 		GlobalPlugin.Login()
 
 		// 周期性写入
-		PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+		PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
 
 		// 登入
 		GlobalPlugin.Logout()
@@ -1233,6 +1378,7 @@ func init() {
 	rtPeriodicWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
 	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
 	rtPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	rtPeriodicWrite.Flags().BoolP("fast_cache", "", false, "fast cache")
 }
 
 func Execute() {

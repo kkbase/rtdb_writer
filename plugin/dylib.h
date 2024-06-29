@@ -54,6 +54,16 @@ void dy_write_rt_digital(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Dig
     write_rt_digital(unit_id, time, digital, count);
 }
 
+void dy_write_rt_analog_list(DYLIB_HANDLE handle, int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count) {
+    void (*write_rt_analog_list)(int64_t, int64_t*, Analog**, int64_t*, int64_t) = (void (*)(int64_t, int64_t*, Analog**, int64_t*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_analog_list");
+    write_rt_analog_list(unit_id, time, analog_array_array_ptr, array_count, count);
+}
+
+void dy_write_rt_digital_list(DYLIB_HANDLE handle, int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count) {
+    void (*write_rt_digital_list)(int64_t, int64_t*, Digital**, int64_t*, int64_t) = (void (*)(int64_t, int64_t*, Digital**, int64_t*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_digital_list");
+    write_rt_digital_list(unit_id, time, digital_array_array_ptr, array_count, count);
+}
+
 
 void dy_write_his_analog(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Analog *analog, int64_t count) {
     void (*write_his_analog)(int64_t, int64_t, Analog*, int64_t) = (void (*)(int64_t, int64_t, Analog*, int64_t)) GET_FUNCTION(handle.handle, "write_his_analog");

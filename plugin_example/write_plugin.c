@@ -20,6 +20,16 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count) {
 }
 
+// 写实时模拟量
+void write_rt_analog_list(int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count) {
+    printf("write rt analog: unit_id: %lld, section count: %lld\n", unit_id, count);
+}
+
+// 写实时数字量
+void write_rt_digital_list(int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count) {
+    printf("write rt digital: unit_id: %lld, section count: %lld\n", unit_id, count);
+}
+
 // 写历史模拟量
 void write_his_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count) {
 }
