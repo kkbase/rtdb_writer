@@ -802,6 +802,7 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 	GlobalPlugin.WriteStaticAnalog(unitNumber, ReadStaticAnalogCsv(analogPath))
 	GlobalPlugin.WriteStaticDigital(unitNumber, ReadStaticDigitalCsv(digitalPath))
 	writeEnd := time.Now()
+
 	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
 }
 
@@ -929,8 +930,10 @@ func NewWritePlugin(path string) *WritePlugin {
 	}
 }
 
-func (df *WritePlugin) Login() {
-	C.dy_login(df.handle)
+func (df *WritePlugin) Login(param string) {
+	cParam := C.CString(param)
+	defer C.free(unsafe.Pointer(cParam))
+	C.dy_login(df.handle, cParam)
 }
 
 func (df *WritePlugin) Logout() {
@@ -1226,12 +1229,13 @@ var staticWrite = &cobra.Command{
 		staticAnalogCsvPath, _ := cmd.Flags().GetString("static_analog")
 		staticDigitalCsvPath, _ := cmd.Flags().GetString("static_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
+		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
 		// 登入
-		GlobalPlugin.Login()
+		GlobalPlugin.Login(param)
 
 		// 静态写入
 		StaticWrite(unitNumber, staticAnalogCsvPath, staticDigitalCsvPath)
@@ -1251,12 +1255,13 @@ var rtFastWrite = &cobra.Command{
 		normalAnalogCsvPath, _ := cmd.Flags().GetString("rt_normal_analog")
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
+		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
 		// 登入
-		GlobalPlugin.Login()
+		GlobalPlugin.Login(param)
 
 		// 极速写入实时值
 		FastWriteRt(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
@@ -1274,12 +1279,13 @@ var hisFastWrite = &cobra.Command{
 		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
 		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
+		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
 		// 登入
-		GlobalPlugin.Login()
+		GlobalPlugin.Login(param)
 
 		// 极速写入历史
 		FastWriteHis(unitNumber, analogCsvPath, digitalCsvPath)
@@ -1297,12 +1303,13 @@ var hisPeriodicWrite = &cobra.Command{
 		analogCsvPath, _ := cmd.Flags().GetString("his_normal_analog")
 		digitalCsvPath, _ := cmd.Flags().GetString("his_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
+		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
 		// 登入
-		GlobalPlugin.Login()
+		GlobalPlugin.Login(param)
 
 		// 周期性写入
 		PeriodicWriteHis(unitNumber, analogCsvPath, digitalCsvPath)
@@ -1324,12 +1331,13 @@ var rtPeriodicWrite = &cobra.Command{
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
 		fastCache, _ := cmd.Flags().GetBool("fast_cache")
+		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
 
 		// 登入
-		GlobalPlugin.Login()
+		GlobalPlugin.Login(param)
 
 		// 周期性写入
 		PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
@@ -1349,6 +1357,7 @@ func init() {
 	staticWrite.Flags().StringP("static_analog", "", "", "static analog csv path")
 	staticWrite.Flags().StringP("static_digital", "", "", "static digital csv path")
 	staticWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	staticWrite.Flags().StringP("param", "", "", "custom param")
 
 	rootCmd.AddCommand(rtFastWrite)
 	rtFastWrite.Flags().StringP("plugin", "", "", "plugin path")
@@ -1357,18 +1366,21 @@ func init() {
 	rtFastWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
 	rtFastWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
 	rtFastWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	rtFastWrite.Flags().StringP("param", "", "", "custom param")
 
 	rootCmd.AddCommand(hisFastWrite)
 	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
 	hisFastWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
 	hisFastWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
 	hisFastWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	hisFastWrite.Flags().StringP("param", "", "", "custom param")
 
 	rootCmd.AddCommand(hisPeriodicWrite)
 	hisPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
 	hisPeriodicWrite.Flags().StringP("his_normal_analog", "", "", "history normal analog csv path")
 	hisPeriodicWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
 	hisPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	hisPeriodicWrite.Flags().StringP("param", "", "", "custom param")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
@@ -1379,6 +1391,7 @@ func init() {
 	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
 	rtPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
 	rtPeriodicWrite.Flags().BoolP("fast_cache", "", false, "fast cache")
+	rtPeriodicWrite.Flags().StringP("param", "", "", "custom param")
 }
 
 func Execute() {

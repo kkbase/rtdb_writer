@@ -34,9 +34,9 @@ int close_library(DYLIB_HANDLE  handle) {
     return CLOSE_LIBRARY(handle.handle);
 }
 
-void dy_login(DYLIB_HANDLE handle) {
-    void (*login)() = (void (*)()) GET_FUNCTION(handle.handle, "login");
-    login();
+void dy_login(DYLIB_HANDLE handle, char* param) {
+    void (*login)(char*) = (void (*)(char*)) GET_FUNCTION(handle.handle, "login");
+    login(param);
 }
 
 void dy_logout(DYLIB_HANDLE handle) {

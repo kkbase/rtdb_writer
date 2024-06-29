@@ -2,8 +2,8 @@
 #include "write_plugin.h"
 
 // 登陆数据库
-void login() {
-    printf("rtdb login!\n");
+void login(char *param) {
+    printf("rtdb login: param: %s\n", param);
 }
 
 // 登出数据库

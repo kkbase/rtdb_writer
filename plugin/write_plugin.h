@@ -68,7 +68,7 @@ typedef struct _StaticDigital_ {
 } StaticDigital;
 
 // 登陆数据库
-void login();
+void login(char *param);
 
 // 登出数据库
 void logout();
