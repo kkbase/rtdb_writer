@@ -14,10 +14,12 @@ import (
 	"gonum.org/v1/gonum/stat"
 	"log"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 )
@@ -512,7 +514,7 @@ func ParseStaticDigitalRecord(record []string) (C.StaticDigital, error) {
 }
 
 // ReadAnalogCsv 读取CSV文件, 将其转换成 C.Analog 结构后发送到缓存队列
-func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan AnalogSection) {
+func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan AnalogSection, exitCh chan bool) {
 	defer wg.Done()
 
 	// 打开文件
@@ -529,6 +531,11 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 	dataList := make([]C.Analog, 0)
 	tsFlag := int64(-1)
 	for {
+		if len(exitCh) != 0 {
+			fmt.Println("信号中断CSV读取协程:", filepath)
+			return
+		}
+
 		// 读取一行, 判断是否为EOF
 		record, err := reader.Read()
 		if err != nil {
@@ -569,7 +576,7 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 }
 
 // ReadDigitalCsv 读取CSV文件, 将其转换成 C.Digital 结构后发送到缓存队列
-func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan DigitalSection) {
+func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan DigitalSection, exitCh chan bool) {
 	defer wg.Done()
 
 	// 打开文件
@@ -586,6 +593,11 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 	dataList := make([]C.Digital, 0)
 	tsFlag := int64(-1)
 	for {
+		if len(exitCh) != 0 {
+			fmt.Println("信号中断CSV读取协程:", filepath)
+			return
+		}
+
 		// 读取一行, 判断是否为EOF
 		record, err := reader.Read()
 		if err != nil {
@@ -705,10 +717,33 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 }
 
 // FastWriteRealtimeSection 极速写入实时断面
-func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
+func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection, exitCh chan bool) {
 	closeNum := 0
+
 	for {
 		select {
+		case <-exitCh:
+			if len(fastAnalogCh) != 0 {
+				for i := 0; i < len(fastAnalogCh); i++ {
+					<-fastAnalogCh
+				}
+			}
+			if len(fastDigitalCh) != 0 {
+				for i := 0; i < len(fastDigitalCh); i++ {
+					<-fastDigitalCh
+				}
+			}
+			if len(normalAnalogCh) != 0 {
+				for i := 0; i < len(normalAnalogCh); i++ {
+					<-normalAnalogCh
+				}
+			}
+			if len(normalDigitalCh) != 0 {
+				for i := 0; i < len(normalDigitalCh); i++ {
+					<-normalDigitalCh
+				}
+			}
+			return
 		case section := <-fastAnalogCh:
 			wt := time.Now()
 			GlobalPlugin.WriteRtAnalog(unitNumber, section)
@@ -765,9 +800,23 @@ func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAna
 }
 
 // FastWriteHisSection 极速写入历史断面
-func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection) {
+func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection, exitCh chan bool) {
 	closeNum := 0
 	for {
+		if len(exitCh) != 0 {
+			if len(analogCh) != 0 {
+				for i := 0; i < len(analogCh); i++ {
+					<-analogCh
+				}
+			}
+			if len(digitalCh) != 0 {
+				for i := 0; i < len(digitalCh); i++ {
+					<-digitalCh
+				}
+			}
+			return
+		}
+
 		select {
 		case section := <-analogCh:
 			wt := time.Now()
@@ -820,11 +869,26 @@ func AsyncPeriodicWriteSection(
 	isRt bool,
 	isFast bool,
 	fastCache bool,
+	exitCh chan bool,
 ) {
 	defer wg.Done()
 
 	sum := 0
 	for {
+		if len(exitCh) != 0 {
+			if len(analogCh) != 0 {
+				for i := 0; i < len(analogCh); i++ {
+					<-analogCh
+				}
+			}
+			if len(digitalCh) != 0 {
+				for i := 0; i < len(digitalCh); i++ {
+					<-digitalCh
+				}
+			}
+			return
+		}
+
 		if fastCache {
 			analogList := make([]AnalogSection, 0)
 			digitalList := make([]DigitalSection, 0)
@@ -998,6 +1062,25 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 
 // FastWriteRt 极速写入实时值
 func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	rd3 := make(chan bool, 1)
+	rd4 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		fmt.Println("捕获中断信号, 进行平滑退出处理")
+		done <- true
+		rd1 <- true
+		rd2 <- true
+		rd3 <- true
+		rd4 <- true
+		fmt.Println("平滑退出信号发送完成")
+	}()
+
 	closeCh := make(chan struct{}, 4)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
 	fastDigitalCh := make(chan DigitalSection, CacheSize)
@@ -1005,15 +1088,15 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 	normalDigitalCh := make(chan DigitalSection, CacheSize)
 	wg := new(sync.WaitGroup)
 	wg.Add(4)
-	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh)
-	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh)
-	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh)
-	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh)
-
+	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh, rd1)
+	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh, rd3)
+	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh, rd4)
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2 * time.Second)
+
 	start := time.Now()
-	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
+	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done)
 	wg.Wait()
 	end := time.Now()
 
@@ -1022,6 +1105,25 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 
 // PeriodicWriteRt 周期性写入实时值
 func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done1 := make(chan bool, 1)
+	done2 := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	rd3 := make(chan bool, 1)
+	rd4 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done1 <- true
+		done2 <- true
+		rd1 <- true
+		rd2 <- true
+		rd3 <- true
+		rd4 <- true
+	}()
+
 	fastCloseCh := make(chan struct{}, 2)
 	normalCloseCh := make(chan struct{}, 2)
 	fastAnalogCh := make(chan AnalogSection, CacheSize)
@@ -1030,10 +1132,10 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	normalDigitalCh := make(chan DigitalSection, CacheSize)
 	wgRead := new(sync.WaitGroup)
 	wgRead.Add(4)
-	go ReadAnalogCsv(wgRead, fastCloseCh, fastAnalogCsvPath, fastAnalogCh)
-	go ReadDigitalCsv(wgRead, fastCloseCh, fastDigitalCsvPath, fastDigitalCh)
-	go ReadAnalogCsv(wgRead, normalCloseCh, normalAnalogCsvPath, normalAnalogCh)
-	go ReadDigitalCsv(wgRead, normalCloseCh, normalDigitalCsvPath, normalDigitalCh)
+	go ReadAnalogCsv(wgRead, fastCloseCh, fastAnalogCsvPath, fastAnalogCh, rd1)
+	go ReadDigitalCsv(wgRead, fastCloseCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+	go ReadAnalogCsv(wgRead, normalCloseCh, normalAnalogCsvPath, normalAnalogCh, rd3)
+	go ReadDigitalCsv(wgRead, normalCloseCh, normalDigitalCsvPath, normalDigitalCh, rd4)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
@@ -1041,11 +1143,11 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache)
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
 	} else {
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache)
-		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
 	}
 	wgWrite.Wait()
 	wgRead.Wait()
@@ -1060,18 +1162,31 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 
 // FastWriteHis 极速写历史
 func FastWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath string) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done <- true
+		rd1 <- true
+		rd2 <- true
+	}()
+
 	closeCh := make(chan struct{}, 4)
 	analogCh := make(chan AnalogSection, CacheSize)
 	digitalCh := make(chan DigitalSection, CacheSize)
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
-	go ReadAnalogCsv(wg, closeCh, analogCsvPath, analogCh)
-	go ReadDigitalCsv(wg, closeCh, digitalCsvPath, digitalCh)
+	go ReadAnalogCsv(wg, closeCh, analogCsvPath, analogCh, rd1)
+	go ReadDigitalCsv(wg, closeCh, digitalCsvPath, digitalCh, rd2)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
 	start := time.Now()
-	FastWriteHisSection(unitNumber, closeCh, analogCh, digitalCh)
+	FastWriteHisSection(unitNumber, closeCh, analogCh, digitalCh, done)
 	wg.Wait()
 	end := time.Now()
 
@@ -1080,13 +1195,26 @@ func FastWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath string)
 
 // PeriodicWriteHis 周期性写历史
 func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath string) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done <- true
+		rd1 <- true
+		rd2 <- true
+	}()
+
 	normalCloseCh := make(chan struct{}, 2)
 	normalAnalogCh := make(chan AnalogSection, CacheSize)
 	normalDigitalCh := make(chan DigitalSection, CacheSize)
 	wgRead := new(sync.WaitGroup)
 	wgRead.Add(2)
-	go ReadAnalogCsv(wgRead, normalCloseCh, analogCsvPath, normalAnalogCh)
-	go ReadDigitalCsv(wgRead, normalCloseCh, digitalCsvPath, normalDigitalCh)
+	go ReadAnalogCsv(wgRead, normalCloseCh, analogCsvPath, normalAnalogCh, rd1)
+	go ReadDigitalCsv(wgRead, normalCloseCh, digitalCsvPath, normalDigitalCh, rd2)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
@@ -1094,7 +1222,7 @@ func PeriodicWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath str
 	start := time.Now()
 	wgWrite := new(sync.WaitGroup)
 	wgWrite.Add(1)
-	AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, false, false, false)
+	AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, false, false, false, done)
 	wgWrite.Wait()
 	wgRead.Wait()
 	end := time.Now()
