@@ -50,7 +50,9 @@ var FastDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
 var NormalAnalogWriteSectionInfoList = make([]WriteSectionInfo, 0)
 var NormalDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
 
-func Summary(analog []WriteSectionInfo, digital []WriteSectionInfo) {
+func StaticSummary(name string, start time.Time, analog []WriteSectionInfo, digital []WriteSectionInfo) {
+	fmt.Printf("%v - %v\n", start.Format(time.RFC3339), name)
+	fmt.Printf("总耗时: %v, 机组数量: %v, 写入pnum数量: %v\n", analog[0].Duration+digital[0].Duration, analog[0].UnitNumber, analog[0].Count+digital[0].Count)
 }
 
 type WriteRtn struct {
@@ -840,7 +842,7 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 		Duration:   t3.Sub(t2),
 		Count:      int64(len(digitalSection.Data)),
 	})
-	fmt.Println("静态写入 - 写入耗时:", t3.Sub(t1))
+	StaticSummary("静态写入", t1, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
 }
 
 // FastWriteRt 极速写入实时值
