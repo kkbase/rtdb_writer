@@ -437,8 +437,6 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 		// dataList 插入
 		dataList = append(dataList, analog)
 	}
-
-	// close(ch)
 }
 
 // ReadDigitalCsv 读取CSV文件, 将其转换成 C.Digital 结构后发送到缓存队列
@@ -676,32 +674,31 @@ func AsyncPeriodicWriteSection(
 	sleepDurationSum := time.Duration(0)
 	writeDurationList := make([]float64, 0)
 
+	closeNum := 0
 	for {
 		if fastCache {
 			analogList := make([]AnalogSection, 0)
 			digitalList := make([]DigitalSection, 0)
-			closeNum := 0
 			for i := 0; i < 100; i++ {
 				select {
 				case section := <-analogCh:
 					analogList = append(analogList, section)
 				case <-closeChan:
 					closeNum++
-					if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
-						break
-					}
+				}
+				if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+					break
 				}
 				select {
 				case section := <-digitalCh:
 					digitalList = append(digitalList, section)
 				case <-closeChan:
 					closeNum++
-					if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
-						break
-					}
+				}
+				if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+					break
 				}
 			}
-
 			start := time.Now()
 
 			GlobalPlugin.WriteRtAnalogList(unitNumber, analogList)
@@ -731,7 +728,8 @@ func AsyncPeriodicWriteSection(
 				} else {
 					GlobalPlugin.WriteHisAnalog(unitNumber, section)
 				}
-			default:
+			case <-closeChan:
+				closeNum++
 			}
 			select {
 			case section := <-digitalCh:
@@ -740,14 +738,15 @@ func AsyncPeriodicWriteSection(
 				} else {
 					GlobalPlugin.WriteHisDigital(unitNumber, section)
 				}
-			default:
+			case <-closeChan:
+				closeNum++
 			}
 			duration := time.Now().Sub(start)
 			writeDurationList = append(writeDurationList, float64(duration))
 			writeDurationSum += duration
 
 			// 全部写完, 退出循环
-			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+			if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
 			}
 
@@ -768,9 +767,6 @@ func AsyncPeriodicWriteSection(
 				}
 			}
 		}
-	}
-	for i := 0; i < 2; i++ {
-		<-closeChan
 	}
 	close(closeChan)
 	close(analogCh)
