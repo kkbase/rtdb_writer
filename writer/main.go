@@ -680,19 +680,25 @@ func AsyncPeriodicWriteSection(
 		if fastCache {
 			analogList := make([]AnalogSection, 0)
 			digitalList := make([]DigitalSection, 0)
+			closeNum := 0
 			for i := 0; i < 100; i++ {
 				select {
 				case section := <-analogCh:
 					analogList = append(analogList, section)
+				case <-closeChan:
+					closeNum++
+					if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+						break
+					}
 				}
 				select {
 				case section := <-digitalCh:
 					digitalList = append(digitalList, section)
-				}
-
-				// 全部写完, 退出循环
-				if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
-					break
+				case <-closeChan:
+					closeNum++
+					if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+						break
+					}
 				}
 			}
 
@@ -705,7 +711,7 @@ func AsyncPeriodicWriteSection(
 			writeDurationSum += duration
 			writeDurationList = append(writeDurationList, float64(duration))
 			// 全部写完, 退出循环
-			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+			if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
 			}
 
