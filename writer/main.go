@@ -706,7 +706,6 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 
 // FastWriteRealtimeSection 极速写入实时断面
 func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
-	start := time.Now()
 	closeNum := 0
 	for {
 		select {
@@ -763,14 +762,11 @@ func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAna
 	close(fastDigitalCh)
 	close(normalAnalogCh)
 	close(normalDigitalCh)
-	end := time.Now()
-	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // FastWriteHisSection 极速写入历史断面
 func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection) {
 	closeNum := 0
-	start := time.Now()
 	for {
 		select {
 		case section := <-analogCh:
@@ -804,10 +800,6 @@ func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh cha
 	close(closeChan)
 	close(analogCh)
 	close(digitalCh)
-
-	end := time.Now()
-
-	HisFastWriteSummary("极速写入历史值", start, end, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // AsyncPeriodicWriteSection 周期性写入断面(实时/历史通用)
@@ -1020,8 +1012,12 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2 * time.Second)
+	start := time.Now()
 	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh)
 	wg.Wait()
+	end := time.Now()
+
+	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // PeriodicWriteRt 周期性写入实时值
@@ -1074,8 +1070,12 @@ func FastWriteHis(unitNumber int64, analogCsvPath string, digitalCsvPath string)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
+	start := time.Now()
 	FastWriteHisSection(unitNumber, closeCh, analogCh, digitalCh)
 	wg.Wait()
+	end := time.Now()
+
+	HisFastWriteSummary("极速写入历史值", start, end, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // PeriodicWriteHis 周期性写历史
