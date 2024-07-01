@@ -68,6 +68,7 @@ typedef struct _StaticDigital_ {
 } StaticDigital;
 
 // 登陆数据库
+// param是命令行向login传递的参数, 如果参数为空则param为NULL
 void login(char *param);
 
 // 登出数据库
@@ -88,9 +89,19 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count);
 
 // 写实时模拟量
+// unit_id: 机组ID
+// count: 断面数量
+// time: 时间列表, 包含count个时间
+// analog_array_array_ptr: 模拟量断面数组, 包含count个断面的模拟量
+// array_count: 每个断面中包含值的数量
 void write_rt_analog_list(int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count);
 
 // 写实时数字量
+// unit_id: 机组ID
+// count: 断面数量
+// time: 时间列表, 包含count个时间
+// analog_array_array_ptr: 数字量断面数组, 包含count个断面的数字量
+// array_count: 每个断面中包含值的数量
 void write_rt_digital_list(int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count);
 
 // 写历史模拟量

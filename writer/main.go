@@ -37,6 +37,22 @@ const FastRegularWritePeriodic = 1
 // NormalRegularWritePeriodic 普通点写入周期, 400毫秒
 const NormalRegularWritePeriodic = 400
 
+// WriteSectionInfo  每次写入断面, 记录基本信息
+type WriteSectionInfo struct {
+	UnitNumber int64         // 机组数量
+	Time       int64         // 断面时间
+	Duration   time.Duration // 写入断面消耗的时间
+	Count      int64         // 写入断面中包含数据的数量
+}
+
+var FastAnalogWriteSectionInfoList = make([]WriteSectionInfo, 0)
+var FastDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
+var NormalAnalogWriteSectionInfoList = make([]WriteSectionInfo, 0)
+var NormalDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
+
+func Summary(analog []WriteSectionInfo, digital []WriteSectionInfo) {
+}
+
 type WriteRtn struct {
 	AllTime     time.Duration
 	WriteTime   time.Duration
@@ -805,12 +821,26 @@ func AsyncPeriodicWriteSection(
 
 // StaticWrite 静态写入
 func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
-	writeStart := time.Now()
-	GlobalPlugin.WriteStaticAnalog(unitNumber, ReadStaticAnalogCsv(analogPath))
-	GlobalPlugin.WriteStaticDigital(unitNumber, ReadStaticDigitalCsv(digitalPath))
-	writeEnd := time.Now()
-
-	fmt.Println("静态写入 - 写入耗时:", writeEnd.Sub(writeStart))
+	t1 := time.Now()
+	analogSection := ReadStaticAnalogCsv(analogPath)
+	GlobalPlugin.WriteStaticAnalog(unitNumber, analogSection)
+	t2 := time.Now()
+	digitalSection := ReadStaticDigitalCsv(digitalPath)
+	GlobalPlugin.WriteStaticDigital(unitNumber, digitalSection)
+	t3 := time.Now()
+	FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
+		UnitNumber: unitNumber,
+		Time:       -1,
+		Duration:   t2.Sub(t1),
+		Count:      int64(len(analogSection.Data)),
+	})
+	FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
+		UnitNumber: unitNumber,
+		Time:       -1,
+		Duration:   t3.Sub(t2),
+		Count:      int64(len(digitalSection.Data)),
+	})
+	fmt.Println("静态写入 - 写入耗时:", t3.Sub(t1))
 }
 
 // FastWriteRt 极速写入实时值
@@ -938,9 +968,13 @@ func NewWritePlugin(path string) *WritePlugin {
 }
 
 func (df *WritePlugin) Login(param string) {
-	cParam := C.CString(param)
-	defer C.free(unsafe.Pointer(cParam))
-	C.dy_login(df.handle, cParam)
+	if param == "" {
+		C.dy_login(df.handle, nil)
+	} else {
+		cParam := C.CString(param)
+		defer C.free(unsafe.Pointer(cParam))
+		C.dy_login(df.handle, cParam)
+	}
 }
 
 func (df *WritePlugin) Logout() {

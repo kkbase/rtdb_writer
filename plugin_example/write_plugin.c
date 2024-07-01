@@ -3,7 +3,11 @@
 
 // 登陆数据库
 void login(char *param) {
-    printf("rtdb login: param: %s\n", param);
+    if (param != NULL) {
+        printf("rtdb login: param: %s\n", param);
+    } else {
+        printf("rtdb login: param: NULL\n");
+    }
 }
 
 // 登出数据库
