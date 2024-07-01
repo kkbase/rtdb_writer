@@ -108,6 +108,17 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 	return allDuration, sectionCount, dAvg, dMax, dMin, dP99, dP95, dP50, pnumCount
 }
 
+func HisFastWriteSummary(
+	name string, start time.Time, end time.Time,
+	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo,
+) {
+	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	fmt.Printf("总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v ,最长耗时: %v, 最短耗时: %v, 中位数耗时: %v, P99耗时: %v, P95耗时: %v\n",
+		nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+	)
+}
+
 func RtFastWriteSummary(
 	name string, start time.Time, end time.Time,
 	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo,
@@ -730,18 +741,29 @@ func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAna
 // FastWriteHisSection 极速写入历史断面
 func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection) {
 	closeNum := 0
-	writeStart := time.Now()
-	sleepDurationSum := time.Duration(0)
+	start := time.Now()
 	for {
 		select {
 		case section := <-analogCh:
 			wt := time.Now()
 			GlobalPlugin.WriteHisAnalog(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			NormalAnalogWriteSectionInfoList = append(NormalAnalogWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case section := <-digitalCh:
 			wt := time.Now()
 			GlobalPlugin.WriteHisDigital(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			NormalDigitalWriteSectionInfoList = append(NormalDigitalWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case <-closeChan:
 			closeNum++
 		}
@@ -754,8 +776,9 @@ func FastWriteHisSection(unitNumber int64, closeChan chan struct{}, analogCh cha
 	close(analogCh)
 	close(digitalCh)
 
-	allTime := time.Now().Sub(writeStart)
-	fmt.Println("极速写入历史值 - 总耗时: ", allTime, "写入耗时:", sleepDurationSum, "其他耗时:", allTime-sleepDurationSum)
+	end := time.Now()
+
+	HisFastWriteSummary("极速写入历史值", start, end, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // AsyncPeriodicWriteSection 周期性写入断面(实时/历史通用)
