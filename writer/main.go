@@ -39,10 +39,11 @@ const NormalRegularWritePeriodic = 400
 
 // WriteSectionInfo  每次写入断面, 记录基本信息
 type WriteSectionInfo struct {
-	UnitNumber int64         // 机组数量
-	Time       int64         // 断面时间
-	Duration   time.Duration // 写入断面消耗的时间
-	Count      int64         // 写入断面中包含数据的数量
+	UnitNumber   int64         // 机组数量
+	Time         int64         // 断面时间
+	Duration     time.Duration // 写入断面消耗的时间
+	SectionCount int64         // 断面数量
+	PNumCount    int64         // PNum数量
 }
 
 var FastAnalogWriteSectionInfoList = make([]WriteSectionInfo, 0)
@@ -50,9 +51,79 @@ var FastDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
 var NormalAnalogWriteSectionInfoList = make([]WriteSectionInfo, 0)
 var NormalDigitalWriteSectionInfoList = make([]WriteSectionInfo, 0)
 
-func StaticSummary(name string, start time.Time, analog []WriteSectionInfo, digital []WriteSectionInfo) {
-	fmt.Printf("%v - %v\n", start.Format(time.RFC3339), name)
-	fmt.Printf("总耗时: %v, 机组数量: %v, 写入pnum数量: %v\n", analog[0].Duration+digital[0].Duration, analog[0].UnitNumber, analog[0].Count+digital[0].Count)
+func DurationListToFloatList(durationList []time.Duration) []float64 {
+	rtn := make([]float64, 0)
+	for _, t := range durationList {
+		rtn = append(rtn, float64(t))
+	}
+	return rtn
+}
+
+func StaticSummary(name string, start time.Time, end time.Time, analog []WriteSectionInfo, digital []WriteSectionInfo) {
+	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	fmt.Printf("总耗时: %v, 机组数量: %v, 写入pnum数量: %v\n", analog[0].Duration+digital[0].Duration, analog[0].UnitNumber, analog[0].PNumCount+digital[0].PNumCount)
+}
+
+func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
+	infoList := make([]WriteSectionInfo, 0)
+
+	for _, info := range analogList {
+		infoList = append(infoList, WriteSectionInfo{
+			Duration:     info.Duration,
+			SectionCount: info.SectionCount,
+			PNumCount:    info.PNumCount,
+			Time:         info.Time,
+			UnitNumber:   info.UnitNumber,
+		})
+	}
+
+	for i, info := range digitalList {
+		if i < len(infoList) {
+			infoList[i].Duration += info.Duration
+			infoList[i].PNumCount += info.PNumCount
+		}
+	}
+
+	allDuration := time.Duration(0)
+	sectionCount := 0
+	durationList := make([]time.Duration, 0)
+	pnumCount := 0
+	for _, info := range infoList {
+		durationList = append(durationList, info.Duration)
+		allDuration += info.Duration
+		sectionCount += int(info.SectionCount)
+		pnumCount += int(info.PNumCount)
+	}
+
+	sort.Slice(durationList, func(i, j int) bool {
+		return durationList[i] < durationList[j]
+	})
+	dAvg := allDuration / time.Duration(sectionCount)
+	dMax := time.Duration(stat.Quantile(1.00, stat.Empirical, DurationListToFloatList(durationList), nil))
+	dMin := time.Duration(stat.Quantile(0.00, stat.Empirical, DurationListToFloatList(durationList), nil))
+	dP99 := time.Duration(stat.Quantile(0.99, stat.Empirical, DurationListToFloatList(durationList), nil))
+	dP95 := time.Duration(stat.Quantile(0.95, stat.Empirical, DurationListToFloatList(durationList), nil))
+	dP50 := time.Duration(stat.Quantile(0.50, stat.Empirical, DurationListToFloatList(durationList), nil))
+
+	return allDuration, sectionCount, dAvg, dMax, dMin, dP99, dP95, dP50, pnumCount
+}
+
+func RtFastWriteSummary(
+	name string, start time.Time, end time.Time,
+	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo,
+	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo,
+) {
+	fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+
+	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	fmt.Printf("写入总耗时: %v\n", fAll+nAll)
+	fmt.Printf("快采点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, 最长耗时: %v, 最短耗时: %v, 中位数耗时: %v, P99耗时: %v, P95耗时: %v\n",
+		fAll, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
+	)
+	fmt.Printf("普通点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v ,最长耗时: %v, 最短耗时: %v, 中位数耗时: %v, P99耗时: %v, P95耗时: %v\n",
+		nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+	)
 }
 
 type WriteRtn struct {
@@ -595,27 +666,50 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 
 // FastWriteRealtimeSection 极速写入实时断面
 func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection) {
+	start := time.Now()
 	closeNum := 0
-	writeStart := time.Now()
-	sleepDurationSum := time.Duration(0)
 	for {
 		select {
 		case section := <-fastAnalogCh:
 			wt := time.Now()
 			GlobalPlugin.WriteRtAnalog(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case section := <-fastDigitalCh:
 			wt := time.Now()
 			GlobalPlugin.WriteRtDigital(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case section := <-normalAnalogCh:
 			wt := time.Now()
 			GlobalPlugin.WriteRtAnalog(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			NormalAnalogWriteSectionInfoList = append(NormalAnalogWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case section := <-normalDigitalCh:
 			wt := time.Now()
 			GlobalPlugin.WriteRtDigital(unitNumber, section)
-			sleepDurationSum += time.Now().Sub(wt)
+			NormalDigitalWriteSectionInfoList = append(NormalDigitalWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         section.Time,
+				Duration:     time.Now().Sub(wt),
+				SectionCount: 1,
+				PNumCount:    int64(len(section.Data)),
+			})
 		case <-closeChan:
 			closeNum++
 		}
@@ -629,9 +723,8 @@ func FastWriteRealtimeSection(unitNumber int64, closeChan chan struct{}, fastAna
 	close(fastDigitalCh)
 	close(normalAnalogCh)
 	close(normalDigitalCh)
-
-	allTime := time.Now().Sub(writeStart)
-	fmt.Println("极速写入实时值 - 总耗时: ", allTime, "写入耗时:", sleepDurationSum, "其他耗时:", allTime-sleepDurationSum)
+	end := time.Now()
+	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // FastWriteHisSection 极速写入历史断面
@@ -831,18 +924,18 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 	GlobalPlugin.WriteStaticDigital(unitNumber, digitalSection)
 	t3 := time.Now()
 	FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
-		UnitNumber: unitNumber,
-		Time:       -1,
-		Duration:   t2.Sub(t1),
-		Count:      int64(len(analogSection.Data)),
+		UnitNumber:   unitNumber,
+		Time:         -1,
+		Duration:     t2.Sub(t1),
+		SectionCount: int64(len(analogSection.Data)),
 	})
 	FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
-		UnitNumber: unitNumber,
-		Time:       -1,
-		Duration:   t3.Sub(t2),
-		Count:      int64(len(digitalSection.Data)),
+		UnitNumber:   unitNumber,
+		Time:         -1,
+		Duration:     t3.Sub(t2),
+		SectionCount: int64(len(digitalSection.Data)),
 	})
-	StaticSummary("静态写入", t1, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
+	StaticSummary("静态写入", t1, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
 }
 
 // FastWriteRt 极速写入实时值
