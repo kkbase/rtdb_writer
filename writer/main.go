@@ -674,28 +674,37 @@ func AsyncPeriodicWriteSection(
 	sleepDurationSum := time.Duration(0)
 	writeDurationList := make([]float64, 0)
 
-	closeNum := 0
 	for {
 		if fastCache {
 			analogList := make([]AnalogSection, 0)
 			digitalList := make([]DigitalSection, 0)
-			for i := 0; i < 100; i++ {
-				select {
-				case section := <-analogCh:
-					analogList = append(analogList, section)
-				case <-closeChan:
-					closeNum++
+			for {
+				if len(analogList) < 100 {
+					select {
+					case section := <-analogCh:
+						analogList = append(analogList, section)
+					default:
+					}
 				}
-				if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+				if len(digitalList) < 100 {
+					select {
+					case section := <-digitalCh:
+						digitalList = append(digitalList, section)
+					default:
+					}
+				}
+				if len(analogList) == 100 && len(digitalList) == 100 {
 					break
 				}
-				select {
-				case section := <-digitalCh:
-					digitalList = append(digitalList, section)
-				case <-closeChan:
-					closeNum++
-				}
-				if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+				if len(closeChan) == 2 {
+					for i := 0; i < len(analogCh); i++ {
+						section := <-analogCh
+						analogList = append(analogList, section)
+					}
+					for i := 0; i < len(digitalCh); i++ {
+						section := <-digitalCh
+						digitalList = append(digitalList, section)
+					}
 					break
 				}
 			}
@@ -708,7 +717,7 @@ func AsyncPeriodicWriteSection(
 			writeDurationSum += duration
 			writeDurationList = append(writeDurationList, float64(duration))
 			// 全部写完, 退出循环
-			if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
 			}
 
@@ -728,8 +737,6 @@ func AsyncPeriodicWriteSection(
 				} else {
 					GlobalPlugin.WriteHisAnalog(unitNumber, section)
 				}
-			case <-closeChan:
-				closeNum++
 			}
 			select {
 			case section := <-digitalCh:
@@ -738,15 +745,13 @@ func AsyncPeriodicWriteSection(
 				} else {
 					GlobalPlugin.WriteHisDigital(unitNumber, section)
 				}
-			case <-closeChan:
-				closeNum++
 			}
 			duration := time.Now().Sub(start)
 			writeDurationList = append(writeDurationList, float64(duration))
 			writeDurationSum += duration
 
 			// 全部写完, 退出循环
-			if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
 			}
 
