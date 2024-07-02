@@ -1049,13 +1049,15 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 		UnitNumber:   unitNumber,
 		Time:         -1,
 		Duration:     t2.Sub(t1),
-		SectionCount: int64(len(analogSection.Data)),
+		SectionCount: 1,
+		PNumCount:    int64(len(analogSection.Data)),
 	})
 	FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
 		UnitNumber:   unitNumber,
 		Time:         -1,
 		Duration:     t3.Sub(t2),
-		SectionCount: int64(len(digitalSection.Data)),
+		SectionCount: 1,
+		PNumCount:    int64(len(digitalSection.Data)),
 	})
 	StaticSummary("静态写入", t1, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
 }
