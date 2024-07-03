@@ -1304,7 +1304,7 @@ func (df *WritePlugin) WriteRtAnalog(unitNumber int64, section AnalogSection) {
 
 func (df *WritePlugin) WriteRtAnalogList(unitNumber int64, sections []AnalogSection) {
 	if unitNumber == 1 {
-		df.SyncWriteRtAnalogList(unitNumber, sections)
+		df.SyncWriteRtAnalogList(0, sections)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
@@ -1317,7 +1317,7 @@ func (df *WritePlugin) WriteRtAnalogList(unitNumber int64, sections []AnalogSect
 
 func (df *WritePlugin) WriteRtDigitalList(unitNumber int64, sections []DigitalSection) {
 	if unitNumber == 1 {
-		df.SyncWriteRtDigitalList(unitNumber, sections)
+		df.SyncWriteRtDigitalList(0, sections)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
