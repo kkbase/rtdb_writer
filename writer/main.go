@@ -1155,10 +1155,17 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	wgRead.Wait()
 	end := time.Now()
 
-	name := "周期性写入实时值(关闭过载保护)"
-	if overloadProtectionFlag {
-		name = "周期性写入实时值(开启载保护)"
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
 	}
+
 	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
 }
 
