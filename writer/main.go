@@ -922,12 +922,36 @@ func AsyncPeriodicWriteSection(
 					break
 				}
 			}
-			start := time.Now()
-
+			t1 := time.Now()
 			GlobalPlugin.WriteRtAnalogList(unitNumber, analogList)
+			t2 := time.Now()
 			GlobalPlugin.WriteRtDigitalList(unitNumber, digitalList)
+			t3 := time.Now()
+			duration := t3.Sub(t1)
 
-			duration := time.Now().Sub(start)
+			aPCount := 0
+			for _, analog := range analogList {
+				aPCount = aPCount + len(analog.Data)
+			}
+			dPCount := 0
+			for _, digital := range digitalList {
+				dPCount = dPCount + len(digital.Data)
+			}
+			FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         analogList[0].Time,
+				Duration:     t2.Sub(t1),
+				SectionCount: int64(len(analogList)),
+				PNumCount:    int64(aPCount),
+			})
+			FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         analogList[0].Time,
+				Duration:     t3.Sub(t2),
+				SectionCount: int64(len(digitalList)),
+				PNumCount:    int64(dPCount),
+			})
+
 			// 全部写完, 退出循环
 			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
