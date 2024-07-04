@@ -1226,8 +1226,114 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
+func PeriodicWriteRtOnlyFast(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, fastCache bool) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done1 := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done1 <- true
+		rd1 <- true
+		rd2 <- true
+	}()
+
+	fastCloseCh := make(chan struct{}, 2)
+	fastAnalogCh := make(chan AnalogSection, CacheSize)
+	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	wgRead := new(sync.WaitGroup)
+	wgRead.Add(2)
+	go ReadAnalogCsv(wgRead, fastCloseCh, fastAnalogCsvPath, fastAnalogCh, rd1)
+	go ReadDigitalCsv(wgRead, fastCloseCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
+	start := time.Now()
+	wgWrite := new(sync.WaitGroup)
+	wgWrite.Add(1)
+	if overloadProtectionFlag {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+	} else {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+	}
+	wgWrite.Wait()
+	wgRead.Wait()
+	end := time.Now()
+
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
+	}
+
+	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
+}
+
+func PeriodicWriteRtOnlyNormal(unitNumber int64, overloadProtectionFlag bool, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done1 := make(chan bool, 1)
+	done2 := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	rd3 := make(chan bool, 1)
+	rd4 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done1 <- true
+		done2 <- true
+		rd1 <- true
+		rd2 <- true
+		rd3 <- true
+		rd4 <- true
+	}()
+
+	normalCloseCh := make(chan struct{}, 2)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wgRead := new(sync.WaitGroup)
+	wgRead.Add(2)
+	go ReadAnalogCsv(wgRead, normalCloseCh, normalAnalogCsvPath, normalAnalogCh, rd3)
+	go ReadDigitalCsv(wgRead, normalCloseCh, normalDigitalCsvPath, normalDigitalCh, rd4)
+
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
+	start := time.Now()
+	wgWrite := new(sync.WaitGroup)
+	wgWrite.Add(1)
+	if overloadProtectionFlag {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
+	} else {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
+	}
+	wgWrite.Wait()
+	wgRead.Wait()
+	end := time.Now()
+
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
+	}
+
+	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
+}
+
 // PeriodicWriteRt 周期性写入实时值
-func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool, mode int64) {
+func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool) {
 	// 平滑退出
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -1712,10 +1818,13 @@ var rtFastWrite = &cobra.Command{
 
 		// 极速写入实时值
 		if mode == 0 {
+			// 写快采 + 普通
 			FastWriteRt(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
 		} else if mode == 1 {
+			// 只写快采
 			FastWriteRtOnlyFast(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath)
 		} else if mode == 2 {
+			// 只写普通
 			FastWriteRtOnlyNormal(unitNumber, normalAnalogCsvPath, normalDigitalCsvPath)
 		} else {
 			panic("mode must be 0 or 1 or 2")
@@ -1796,7 +1905,15 @@ var rtPeriodicWrite = &cobra.Command{
 		GlobalPlugin.Login(param)
 
 		// 周期性写入
-		PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache, mode)
+		if mode == 0 {
+			PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
+		} else if mode == 1 {
+			PeriodicWriteRtOnlyFast(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, fastCache)
+		} else if mode == 2 {
+			PeriodicWriteRtOnlyNormal(unitNumber, overloadProtection, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
+		} else {
+			panic("mode must be 0 or 1 or 2")
+		}
 
 		// 登入
 		GlobalPlugin.Logout()
