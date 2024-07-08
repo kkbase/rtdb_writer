@@ -44,14 +44,14 @@ void dy_logout(DYLIB_HANDLE handle) {
     logout();
 }
 
-void dy_write_rt_analog(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Analog *analog, int64_t count) {
-    void (*write_rt_analog)(int64_t, int64_t, Analog*, int64_t) = (void (*)(int64_t, int64_t, Analog*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_analog");
-    write_rt_analog(unit_id, time, analog, count);
+void dy_write_rt_analog(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Analog *analog, int64_t count, bool is_fast) {
+    void (*write_rt_analog)(int64_t, int64_t, Analog*, int64_t, bool) = (void (*)(int64_t, int64_t, Analog*, int64_t, bool)) GET_FUNCTION(handle.handle, "write_rt_analog");
+    write_rt_analog(unit_id, time, analog, count, is_fast);
 }
 
-void dy_write_rt_digital(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Digital *digital, int64_t count) {
-    void (*write_rt_digital)(int64_t, int64_t, Digital*, int64_t) = (void (*)(int64_t, int64_t, Digital*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_digital");
-    write_rt_digital(unit_id, time, digital, count);
+void dy_write_rt_digital(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Digital *digital, int64_t count, bool is_fast) {
+    void (*write_rt_digital)(int64_t, int64_t, Digital*, int64_t, bool) = (void (*)(int64_t, int64_t, Digital*, int64_t, bool)) GET_FUNCTION(handle.handle, "write_rt_digital");
+    write_rt_digital(unit_id, time, digital, count, is_fast);
 }
 
 void dy_write_rt_analog_list(DYLIB_HANDLE handle, int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count) {

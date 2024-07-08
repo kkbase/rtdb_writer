@@ -16,8 +16,12 @@ void logout() {
 }
 
 // 写实时模拟量
-void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count) {
-    printf("write rt analog: unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count, bool is_fast) {
+    if (is_fast) {
+        printf("write rt analog(fast): unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+    } else {
+        printf("write rt analog(normal): unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+    }
     int sum = 0;
     for (int i=0; i<10000000; i++) {
         sum++;
@@ -25,8 +29,12 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
 }
 
 // 写实时数字量
-void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count) {
-    printf("write rt digital: unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count, bool is_fast) {
+    if (is_fast) {
+        printf("write rt digital(fast): unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+    } else {
+        printf("write rt digital(normal): unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
+    }
 }
 
 // 写实时模拟量
