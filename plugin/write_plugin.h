@@ -79,6 +79,7 @@ void logout();
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
 // count: 数组长度
+// is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count, bool is_fast);
 
 // 写实时数字量
@@ -86,6 +87,7 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
 // time: 断面时间戳
 // digital_array_ptr: 指向数字量数组的指针
 // count: 数组长度
+// is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count, bool is_fast);
 
 // 写实时模拟量
