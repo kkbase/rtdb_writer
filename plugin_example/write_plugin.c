@@ -62,11 +62,19 @@ void write_his_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr
 }
 
 // 写静态模拟量
-void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count) {
-    printf("write static analog: unit_id: %lld, count: %lld\n", unit_id, count);
+void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count, bool is_fast) {
+    if (is_fast) {
+        printf("write static analog(fast): unit_id: %lld, count: %lld\n", unit_id, count);
+    } else {
+        printf("write static analog(normal): unit_id: %lld, count: %lld\n", unit_id, count);
+    }
 }
 
 // 写静态数字量
-void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count) {
-    printf("write static digital: unit_id: %lld, count: %lld\n", unit_id, count);
+void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count, bool is_fast) {
+    if (is_fast) {
+        printf("write static digital(fast): unit_id: %lld, count: %lld\n", unit_id, count);
+    } else {
+        printf("write static digital(normal): unit_id: %lld, count: %lld\n", unit_id, count);
+    }
 }

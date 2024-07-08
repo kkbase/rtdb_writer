@@ -124,13 +124,13 @@ void write_his_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
-void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count);
+void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count, bool is_fast);
 
 // 写静态数字量
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度
-void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count);
+void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count, bool is_fast);
 
 #ifdef __cplusplus
 }
