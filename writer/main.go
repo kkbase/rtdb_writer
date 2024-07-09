@@ -549,6 +549,7 @@ func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, c
 	for {
 		if len(exitCh) != 0 {
 			log.Println("信号中断CSV读取协程:", filepath)
+			closeCh <- struct{}{}
 			return
 		}
 
@@ -611,6 +612,7 @@ func ReadDigitalCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, 
 	for {
 		if len(exitCh) != 0 {
 			log.Println("信号中断CSV读取协程:", filepath)
+			closeCh <- struct{}{}
 			return
 		}
 
