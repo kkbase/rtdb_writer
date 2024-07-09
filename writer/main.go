@@ -1077,13 +1077,13 @@ func AsyncPeriodicWriteSection(
 }
 
 // StaticWrite 静态写入
-func StaticWrite(unitNumber int64, analogPath string, digitalPath string, isFast bool) {
+func StaticWrite(unitNumber int64, analogPath string, digitalPath string, typ int64) {
 	t1 := time.Now()
 	analogSection := ReadStaticAnalogCsv(analogPath)
-	GlobalPlugin.WriteStaticAnalog(unitNumber, analogSection, isFast)
+	GlobalPlugin.WriteStaticAnalog(unitNumber, analogSection, typ)
 	t2 := time.Now()
 	digitalSection := ReadStaticDigitalCsv(digitalPath)
-	GlobalPlugin.WriteStaticDigital(unitNumber, digitalSection, isFast)
+	GlobalPlugin.WriteStaticDigital(unitNumber, digitalSection, typ)
 	t3 := time.Now()
 	FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
 		UnitNumber:   unitNumber,
@@ -1478,13 +1478,13 @@ func NewWritePlugin(path string) *WritePlugin {
 	}
 }
 
-func (df *WritePlugin) Login(param string) {
+func (df *WritePlugin) Login(param string) int {
 	if param == "" {
-		C.dy_login(df.handle, nil)
+		return int(C.dy_login(df.handle, nil))
 	} else {
 		cParam := C.CString(param)
 		defer C.free(unsafe.Pointer(cParam))
-		C.dy_login(df.handle, cParam)
+		return int(C.dy_login(df.handle, cParam))
 	}
 }
 
@@ -1570,27 +1570,27 @@ func (df *WritePlugin) WriteHisDigital(unitNumber int64, section DigitalSection)
 	}
 }
 
-func (df *WritePlugin) WriteStaticAnalog(unitNumber int64, section StaticAnalogSection, isFast bool) {
+func (df *WritePlugin) WriteStaticAnalog(unitNumber int64, section StaticAnalogSection, typ int64) {
 	if unitNumber == 1 {
-		df.SyncWriteStaticAnalog(0, section, isFast)
+		df.SyncWriteStaticAnalog(0, section, typ)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
 		for i := int64(0); i < unitNumber; i++ {
-			go df.AsyncWriteStaticAnalog(wg, i, section, isFast)
+			go df.AsyncWriteStaticAnalog(wg, i, section, typ)
 		}
 		wg.Wait()
 	}
 }
 
-func (df *WritePlugin) WriteStaticDigital(unitNumber int64, section StaticDigitalSection, isFast bool) {
+func (df *WritePlugin) WriteStaticDigital(unitNumber int64, section StaticDigitalSection, typ int64) {
 	if unitNumber == 1 {
-		df.SyncWriteStaticDigital(0, section, isFast)
+		df.SyncWriteStaticDigital(0, section, typ)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
 		for i := int64(0); i < unitNumber; i++ {
-			go df.AsyncWriteStaticDigital(wg, i, section, isFast)
+			go df.AsyncWriteStaticDigital(wg, i, section, typ)
 		}
 		wg.Wait()
 	}
@@ -1676,12 +1676,12 @@ func (df *WritePlugin) SyncWriteHisDigital(unitId int64, section DigitalSection)
 	C.dy_write_his_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) SyncWriteStaticAnalog(unitId int64, section StaticAnalogSection, isFast bool) {
-	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
+func (df *WritePlugin) SyncWriteStaticAnalog(unitId int64, section StaticAnalogSection, typ int64) {
+	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
-func (df *WritePlugin) SyncWriteStaticDigital(unitId int64, section StaticDigitalSection, isFast bool) {
-	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
+func (df *WritePlugin) SyncWriteStaticDigital(unitId int64, section StaticDigitalSection, typ int64) {
+	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
 func (df *WritePlugin) AsyncWriteRtAnalog(wg *sync.WaitGroup, unitId int64, section AnalogSection, isFast bool) {
@@ -1714,14 +1714,14 @@ func (df *WritePlugin) AsyncWriteHisDigital(wg *sync.WaitGroup, unitId int64, se
 	C.dy_write_his_digital(df.handle, C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
-func (df *WritePlugin) AsyncWriteStaticAnalog(wg *sync.WaitGroup, unitId int64, section StaticAnalogSection, isFast bool) {
+func (df *WritePlugin) AsyncWriteStaticAnalog(wg *sync.WaitGroup, unitId int64, section StaticAnalogSection, typ int64) {
 	defer wg.Done()
-	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
+	C.dy_write_static_analog(df.handle, C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
-func (df *WritePlugin) AsyncWriteStaticDigital(wg *sync.WaitGroup, unitId int64, section StaticDigitalSection, isFast bool) {
+func (df *WritePlugin) AsyncWriteStaticDigital(wg *sync.WaitGroup, unitId int64, section StaticDigitalSection, typ int64) {
 	defer wg.Done()
-	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
+	C.dy_write_static_digital(df.handle, C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
 var GlobalPlugin *WritePlugin = nil
@@ -1781,7 +1781,7 @@ var staticWrite = &cobra.Command{
 		staticAnalogCsvPath, _ := cmd.Flags().GetString("static_analog")
 		staticDigitalCsvPath, _ := cmd.Flags().GetString("static_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
-		isFast, _ := cmd.Flags().GetBool("is_fast")
+		typ, _ := cmd.Flags().GetInt64("type")
 		param, _ := cmd.Flags().GetString("param")
 
 		// 加载动态库
@@ -1791,7 +1791,7 @@ var staticWrite = &cobra.Command{
 		GlobalPlugin.Login(param)
 
 		// 静态写入
-		StaticWrite(unitNumber, staticAnalogCsvPath, staticDigitalCsvPath, isFast)
+		StaticWrite(unitNumber, staticAnalogCsvPath, staticDigitalCsvPath, typ)
 
 		// 登出
 		GlobalPlugin.Logout()
@@ -1931,7 +1931,7 @@ func init() {
 	staticWrite.Flags().StringP("static_analog", "", "", "static analog csv path")
 	staticWrite.Flags().StringP("static_digital", "", "", "static digital csv path")
 	staticWrite.Flags().Int64P("unit_number", "", 1, "unit number")
-	staticWrite.Flags().Bool("is_fast", false, "is fast")
+	staticWrite.Flags().Int64P("type", "", 0, "type")
 	staticWrite.Flags().StringP("param", "", "", "custom param")
 
 	rootCmd.AddCommand(rtFastWrite)

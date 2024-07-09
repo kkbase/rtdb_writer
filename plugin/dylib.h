@@ -34,9 +34,9 @@ int close_library(DYLIB_HANDLE  handle) {
     return CLOSE_LIBRARY(handle.handle);
 }
 
-void dy_login(DYLIB_HANDLE handle, char* param) {
-    void (*login)(char*) = (void (*)(char*)) GET_FUNCTION(handle.handle, "login");
-    login(param);
+int dy_login(DYLIB_HANDLE handle, char* param) {
+    int (*login)(char*) = (int (*)(char*)) GET_FUNCTION(handle.handle, "login");
+    return login(param);
 }
 
 void dy_logout(DYLIB_HANDLE handle) {
@@ -75,14 +75,14 @@ void dy_write_his_digital(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Di
     write_his_digital(unit_id, time, digital, count);
 }
 
-void dy_write_static_analog(DYLIB_HANDLE handle, int64_t unit_id, StaticAnalog *static_analog, int64_t count, bool is_fast) {
-    void (*write_static_analog)(int64_t, StaticAnalog*, int64_t, bool) = (void (*)(int64_t, StaticAnalog*, int64_t, bool)) GET_FUNCTION(handle.handle, "write_static_analog");
-    write_static_analog(unit_id, static_analog, count, is_fast);
+void dy_write_static_analog(DYLIB_HANDLE handle, int64_t unit_id, StaticAnalog *static_analog, int64_t count, int64_t type) {
+    void (*write_static_analog)(int64_t, StaticAnalog*, int64_t, int64_t) = (void (*)(int64_t, StaticAnalog*, int64_t, int64_t)) GET_FUNCTION(handle.handle, "write_static_analog");
+    write_static_analog(unit_id, static_analog, count, type);
 }
 
-void dy_write_static_digital(DYLIB_HANDLE handle, int64_t unit_id, StaticDigital *static_digital, int64_t count, bool is_fast) {
-    void (*write_static_digital)(int64_t, StaticDigital*, int64_t, bool) = (void (*)(int64_t, StaticDigital*, int64_t, bool)) GET_FUNCTION(handle.handle, "write_static_digital");
-    write_static_digital(unit_id, static_digital, count, is_fast);
+void dy_write_static_digital(DYLIB_HANDLE handle, int64_t unit_id, StaticDigital *static_digital, int64_t count, int64_t type) {
+    void (*write_static_digital)(int64_t, StaticDigital*, int64_t, int64_t) = (void (*)(int64_t, StaticDigital*, int64_t, int64_t)) GET_FUNCTION(handle.handle, "write_static_digital");
+    write_static_digital(unit_id, static_digital, count, type);
 }
 
 

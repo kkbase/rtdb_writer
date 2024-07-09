@@ -69,7 +69,8 @@ typedef struct _StaticDigital_ {
 
 // 登陆数据库
 // param是命令行向login传递的参数, 如果参数为空则param为NULL
-void login(char *param);
+// 返回值: 0表示登陆成功, 非0表示登陆失败
+int login(char *param);
 
 // 登出数据库
 void logout();
@@ -90,20 +91,22 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
 // is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count, bool is_fast);
 
-// 写实时模拟量
+// 批量写实时模拟量
 // unit_id: 机组ID
 // count: 断面数量
 // time: 时间列表, 包含count个时间
 // analog_array_array_ptr: 模拟量断面数组, 包含count个断面的模拟量
 // array_count: 每个断面中包含值的数量
+// 备注: 只有写快采点的时候会调用此接口
 void write_rt_analog_list(int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count);
 
-// 写实时数字量
+// 批量写实时数字量
 // unit_id: 机组ID
 // count: 断面数量
 // time: 时间列表, 包含count个时间
 // analog_array_array_ptr: 数字量断面数组, 包含count个断面的数字量
 // array_count: 每个断面中包含值的数量
+// 备注: 只有写快采点的时候会调用此接口
 void write_rt_digital_list(int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count);
 
 // 写历史模拟量
@@ -124,13 +127,15 @@ void write_his_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
-void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count, bool is_fast);
+// type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
+void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count, int64_t type);
 
 // 写静态数字量
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度
-void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count, bool is_fast);
+// type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
+void write_static_digital(int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count, int64_t type);
 
 #ifdef __cplusplus
 }
