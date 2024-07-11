@@ -6,15 +6,16 @@
 
 //
 // global_id是一个全局唯一的ID, 格式如下:
-// +-------+---------+-----------+-------+
-// | 32bit |  8 bit  |   1bit    | 23bit |
-// +-------+---------+-----------+-------+
-// | magic | unit_id | is_analog | p_num |
-// +-------+---------+-----------+-------+
+// +-------+---------+-----------+---------+-------+-------+
+// | 32bit |  8 bit  |   1bit    |  1 bit  | 1 bit | 21bit |
+// +-------+---------+-----------+---------+-------+-------+
+// | magic | unit_id | is_analog | is_fast | is_rt | p_num |
+// +-------+---------+-----------+---------+-------+-------+
 //
 // * magic: 魔数, 由用户手动输入(默认为0)
 // * unit_id: 机组ID
 // * is_analog: 1表示模拟量, 0表示数字量
+// * is_fast: 1表示块采点, 0表示普通点
 // * p_num: 对应CSV中的PNUM
 //
 
@@ -151,7 +152,7 @@ void write_his_digital(int32_t magic, int64_t unit_id, int64_t time, Digital *di
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
-// type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
+// type: 数据类型, 通过命令行传递, 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 void write_static_analog(int32_t magic, int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count, int64_t type);
 
 // 写静态数字量
@@ -159,7 +160,7 @@ void write_static_analog(int32_t magic, int64_t unit_id, StaticAnalog *static_an
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度
-// type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
+// type: 数据类型, 通过命令行传递, 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 void write_static_digital(int32_t magic, int64_t unit_id, StaticDigital *static_digital_array_ptr, int64_t count, int64_t type);
 
 #ifdef __cplusplus

@@ -1486,43 +1486,51 @@ func RandAnalogSection(section AnalogSection) AnalogSection {
 }
 
 // GlobalID 拼接GlobalID
-// +-------+---------+-----------+-------+
-// | 32bit |  8 bit  |   1bit    | 23bit |
-// +-------+---------+-----------+-------+
-// | magic | unit_id | is_analog | p_num |
-// +-------+---------+-----------+-------+
-func GlobalID(magic int32, unitId int64, isAnalog bool, pNum int32) int64 {
+// +-------+---------+-----------+---------+-------+-------+
+// | 32bit |  8 bit  |   1bit    |  1 bit  | 1 bit | 21bit |
+// +-------+---------+-----------+---------+-------+-------+
+// | magic | unit_id | is_analog | is_fast | is_rt | p_num |
+// +-------+---------+-----------+---------+-------+-------+
+func GlobalID(magic int32, unitId int64, isAnalog bool, isFast bool, isRt bool, pNum int32) int64 {
 	isAnalogVal := int64(0)
 	if isAnalog {
 		isAnalogVal = 1
 	}
-	return int64(magic)<<32 | unitId<<24 | isAnalogVal<<23 | int64(pNum)
+	isFastVal := int64(0)
+	if isFast {
+		isFastVal = 1
+	}
+	isRtVal := int64(0)
+	if isRt {
+		isRtVal = 1
+	}
+	return int64(magic)<<32 | unitId<<24 | isAnalogVal<<23 | isFastVal<<22 | isRtVal<<21 | int64(pNum)&0x1FFFFF
 }
 
-func InitAnalogGlobalID(magic int32, unitId int64, section AnalogSection) AnalogSection {
+func InitAnalogGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section AnalogSection) AnalogSection {
 	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, int32(section.Data[i].p_num)))
+		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
 	}
 	return section
 }
 
-func InitDigitalGlobalID(magic int32, unitId int64, section DigitalSection) DigitalSection {
+func InitDigitalGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section DigitalSection) DigitalSection {
 	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, int32(section.Data[i].p_num)))
+		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
 	}
 	return section
 }
 
-func InitStaticAnalogGlobalID(magic int32, unitId int64, section StaticAnalogSection) StaticAnalogSection {
+func InitStaticAnalogGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section StaticAnalogSection) StaticAnalogSection {
 	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, int32(section.Data[i].p_num)))
+		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
 	}
 	return section
 }
 
-func InitStaticDigitalGlobalID(magic int32, unitId int64, section StaticDigitalSection) StaticDigitalSection {
+func InitStaticDigitalGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section StaticDigitalSection) StaticDigitalSection {
 	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, int32(section.Data[i].p_num)))
+		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
 	}
 	return section
 }
@@ -1661,12 +1669,12 @@ func (df *WritePlugin) SyncWriteRtAnalog(magic int32, unitId int64, section Anal
 	if randomAv {
 		section = RandAnalogSection(section)
 	}
-	section = InitAnalogGlobalID(magic, unitId, section)
+	section = InitAnalogGlobalID(magic, unitId, isFast, true, section)
 	C.dy_write_rt_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
 }
 
 func (df *WritePlugin) SyncWriteRtDigital(magic int32, unitId int64, section DigitalSection, isFast bool) {
-	section = InitDigitalGlobalID(magic, unitId, section)
+	section = InitDigitalGlobalID(magic, unitId, isFast, true, section)
 	C.dy_write_rt_digital(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
 }
 
@@ -1677,7 +1685,7 @@ func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, sections
 		}
 	}
 	for i := 0; i < len(sections); i++ {
-		sections[i] = InitAnalogGlobalID(magic, unitId, sections[i])
+		sections[i] = InitAnalogGlobalID(magic, unitId, true, true, sections[i])
 	}
 
 	// 初始化 C 数组
@@ -1713,7 +1721,7 @@ func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, sections
 
 func (df *WritePlugin) SyncWriteRtDigitalList(magic int32, unitId int64, sections []DigitalSection) {
 	for i := 0; i < len(sections); i++ {
-		sections[i] = InitDigitalGlobalID(magic, unitId, sections[i])
+		sections[i] = InitDigitalGlobalID(magic, unitId, true, true, sections[i])
 	}
 
 	// 初始化 C 数组
@@ -1751,22 +1759,38 @@ func (df *WritePlugin) SyncWriteHisAnalog(magic int32, unitId int64, section Ana
 	if randomAv {
 		section = RandAnalogSection(section)
 	}
-	section = InitAnalogGlobalID(magic, unitId, section)
+	section = InitAnalogGlobalID(magic, unitId, false, false, section)
 	C.dy_write_his_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
 func (df *WritePlugin) SyncWriteHisDigital(magic int32, unitId int64, section DigitalSection) {
-	section = InitDigitalGlobalID(magic, unitId, section)
+	section = InitDigitalGlobalID(magic, unitId, false, false, section)
 	C.dy_write_his_digital(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)))
 }
 
 func (df *WritePlugin) SyncWriteStaticAnalog(magic int32, unitId int64, section StaticAnalogSection, typ int64) {
-	section = InitStaticAnalogGlobalID(magic, unitId, section)
+	if typ == 0 {
+		section = InitStaticAnalogGlobalID(magic, unitId, true, true, section)
+	} else if typ == 1 {
+		section = InitStaticAnalogGlobalID(magic, unitId, false, true, section)
+	} else if typ == 2 {
+		section = InitStaticAnalogGlobalID(magic, unitId, false, false, section)
+	} else {
+		panic("未知type: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点")
+	}
 	C.dy_write_static_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
 func (df *WritePlugin) SyncWriteStaticDigital(magic int32, unitId int64, section StaticDigitalSection, typ int64) {
-	section = InitStaticDigitalGlobalID(magic, unitId, section)
+	if typ == 0 {
+		section = InitStaticDigitalGlobalID(magic, unitId, true, true, section)
+	} else if typ == 1 {
+		section = InitStaticDigitalGlobalID(magic, unitId, false, true, section)
+	} else if typ == 2 {
+		section = InitStaticDigitalGlobalID(magic, unitId, false, false, section)
+	} else {
+		panic("未知type: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点")
+	}
 	C.dy_write_static_digital(df.handle, C.int32_t(magic), C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
 }
 
@@ -2031,7 +2055,7 @@ func init() {
 	staticWrite.Flags().StringP("static_analog", "", "", "static analog csv path")
 	staticWrite.Flags().StringP("static_digital", "", "", "static digital csv path")
 	staticWrite.Flags().Int64P("unit_number", "", 1, "unit number")
-	staticWrite.Flags().Int64P("type", "", 0, "type")
+	staticWrite.Flags().Int64P("type", "", 0, "0代表实时快采集点, 1代表实时普通点, 2代表历史普通点")
 	staticWrite.Flags().StringP("param", "", "", "custom param")
 	staticWrite.Flags().Int32P("magic", "", 0, "魔数, 默认为0")
 
