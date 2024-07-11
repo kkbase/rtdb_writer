@@ -25,6 +25,15 @@ void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, in
         printf("write rt analog(normal): unit_id: %lld, time: %lld, count: %lld\n", unit_id, time, count);
     }
     int sum = 0;
+    if (time == 0) {
+        for (int i=0; i<count; i++) {
+            if (i == count-1) {
+                printf("%f\n", analog_array_ptr[i].av);
+            } else {
+                printf("%f ", analog_array_ptr[i].av);
+            }
+        }
+    }
     for (int i=0; i<10000000; i++) {
         sum++;
     }
