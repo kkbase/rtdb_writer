@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"gonum.org/v1/gonum/stat"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"sort"
@@ -1470,7 +1471,7 @@ func PeriodicWriteHis(magic int32, unitNumber int64, analogCsvPath string, digit
 	PeriodicWriteHisSummary(magic, "周期性写入历史值", start, end, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
 }
 
-func RandAnalogSection(unitID int64, section AnalogSection) AnalogSection {
+func RandAnalogSection(section AnalogSection) AnalogSection {
 	ss := AnalogSection{
 		Time: section.Time,
 		Data: make([]C.Analog, 0),
@@ -1479,7 +1480,7 @@ func RandAnalogSection(unitID int64, section AnalogSection) AnalogSection {
 		ss.Data = append(ss.Data, d)
 	}
 	for i := 0; i < len(ss.Data); i++ {
-		ss.Data[i].av += C.float(unitID)
+		ss.Data[i].av += C.float(float32(rand.Intn(30)))
 	}
 	return ss
 }
@@ -1666,7 +1667,7 @@ func (df *WritePlugin) WriteStaticDigital(magic int32, unitNumber int64, section
 
 func (df *WritePlugin) SyncWriteRtAnalog(magic int32, unitId int64, section AnalogSection, isFast bool, randomAv bool) {
 	if randomAv {
-		section = RandAnalogSection(unitId, section)
+		section = RandAnalogSection(section)
 	}
 	section = InitAnalogGlobalID(magic, unitId, isFast, true, section)
 	C.dy_write_rt_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
@@ -1680,7 +1681,7 @@ func (df *WritePlugin) SyncWriteRtDigital(magic int32, unitId int64, section Dig
 func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, sections []AnalogSection, randomAv bool) {
 	if randomAv {
 		for i := 0; i < len(sections); i++ {
-			sections[i] = RandAnalogSection(unitId, sections[i])
+			sections[i] = RandAnalogSection(sections[i])
 		}
 	}
 	for i := 0; i < len(sections); i++ {
@@ -1756,7 +1757,7 @@ func (df *WritePlugin) SyncWriteRtDigitalList(magic int32, unitId int64, section
 
 func (df *WritePlugin) SyncWriteHisAnalog(magic int32, unitId int64, section AnalogSection, randomAv bool) {
 	if randomAv {
-		section = RandAnalogSection(unitId, section)
+		section = RandAnalogSection(section)
 	}
 	section = InitAnalogGlobalID(magic, unitId, false, false, section)
 	C.dy_write_his_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Analog)(&section.Data[0]), C.int64_t(len(section.Data)))
