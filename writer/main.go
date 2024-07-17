@@ -1826,12 +1826,12 @@ func (df *WritePlugin) AsyncWriteHisDigital(wg *sync.WaitGroup, magic int32, uni
 
 func (df *WritePlugin) AsyncWriteStaticAnalog(wg *sync.WaitGroup, magic int32, unitId int64, section StaticAnalogSection, typ int64) {
 	defer wg.Done()
-	C.dy_write_static_analog(df.handle, C.int32_t(magic), C.int64_t(unitId), (*C.StaticAnalog)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
+	df.SyncWriteStaticAnalog(magic, unitId, section, typ)
 }
 
 func (df *WritePlugin) AsyncWriteStaticDigital(wg *sync.WaitGroup, magic int32, unitId int64, section StaticDigitalSection, typ int64) {
 	defer wg.Done()
-	C.dy_write_static_digital(df.handle, C.int32_t(magic), C.int64_t(unitId), (*C.StaticDigital)(&section.Data[0]), C.int64_t(len(section.Data)), C.int64_t(typ))
+	df.SyncWriteStaticDigital(magic, unitId, section, typ)
 }
 
 var GlobalPlugin *WritePlugin = nil
