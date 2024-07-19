@@ -126,6 +126,35 @@ func HisFastWriteSummary(
 	}
 }
 
+func ParallelRtFastWriteSummary(
+	magic int32, name string, start time.Time, end time.Time,
+	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo,
+	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo,
+) {
+	log.Printf("MAGIC: %v, %v - 开始时间: %v, 结束时间: %v\n", magic, name, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	allTime := time.Duration(0)
+	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		if allTime < fAll {
+			allTime = fAll
+		}
+		log.Printf("快采点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			fAll, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
+		)
+	}
+	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		if allTime < nAll {
+			allTime = nAll
+		}
+		log.Printf("普通点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+		)
+	}
+	log.Printf("统计总耗时(刨除掉等待CSV读取时间): %v\n", allTime)
+	log.Printf("实际总耗时(会算上等待CSV读取时间): %v\n", end.Sub(start))
+}
+
 func RtFastWriteSummary(
 	magic int32, name string, start time.Time, end time.Time,
 	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo,
@@ -1107,7 +1136,7 @@ func StaticWrite(magic int32, unitNumber int64, analogPath string, digitalPath s
 	StaticSummary(magic, "静态写入", t1, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
 }
 
-func FastWriteRtOnlyFast(magic int32, unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string, randomAv bool) {
+func FastWriteRtOnlyFast(magic int32, unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string, randomAv bool, parallelWriting bool) {
 	// 平滑退出
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -1145,10 +1174,12 @@ func FastWriteRtOnlyFast(magic int32, unitNumber int64, fastAnalogCsvPath string
 	wg.Wait()
 	end := time.Now()
 
-	RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+	if !parallelWriting {
+		RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+	}
 }
 
-func FastWriteRtOnlyNormal(magic int32, unitNumber int64, normalAnalogCsvPath string, normalDigitalCsvPath string, randomAv bool) {
+func FastWriteRtOnlyNormal(magic int32, unitNumber int64, normalAnalogCsvPath string, normalDigitalCsvPath string, randomAv bool, parallelWriting bool) {
 	// 平滑退出
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -1185,7 +1216,27 @@ func FastWriteRtOnlyNormal(magic int32, unitNumber int64, normalAnalogCsvPath st
 	wg.Wait()
 	end := time.Now()
 
-	RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+	if !parallelWriting {
+		RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+	}
+}
+
+func ParallelFastWriteRt(magic int32, unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string, normalAnalogCsvPath string, normalDigitalCsvPath string, randomAv bool) {
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	start := time.Now()
+	go func() {
+		defer wg.Done()
+		FastWriteRtOnlyFast(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, randomAv, true)
+	}()
+	go func() {
+		defer wg.Done()
+		FastWriteRtOnlyNormal(magic, unitNumber, normalAnalogCsvPath, normalDigitalCsvPath, randomAv, true)
+	}()
+	wg.Wait()
+	end := time.Now()
+
+	ParallelRtFastWriteSummary(magic, "极速写入实时值(块采点,普通点并行)", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // FastWriteRt 极速写入实时值
@@ -1228,7 +1279,7 @@ func FastWriteRt(magic int32, unitNumber int64, fastAnalogCsvPath string, fastDi
 	wg.Wait()
 	end := time.Now()
 
-	RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+	RtFastWriteSummary(magic, "极速写入实时值(快采点,普通点串行)", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 func PeriodicWriteRtOnlyFast(magic int32, unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, fastCache bool, randomAv bool) {
@@ -1924,6 +1975,7 @@ var rtFastWrite = &cobra.Command{
 		param, _ := cmd.Flags().GetString("param")
 		mode, _ := cmd.Flags().GetInt64("mode")
 		magic, _ := cmd.Flags().GetInt32("magic")
+		parallelWriting, _ := cmd.Flags().GetBool("parallel_writing")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1938,13 +1990,17 @@ var rtFastWrite = &cobra.Command{
 		// 极速写入实时值
 		if mode == 0 {
 			// 写快采 + 普通
-			FastWriteRt(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, randomAv)
+			if parallelWriting {
+				ParallelFastWriteRt(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, randomAv)
+			} else {
+				FastWriteRt(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, randomAv)
+			}
 		} else if mode == 1 {
 			// 只写快采
-			FastWriteRtOnlyFast(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, randomAv)
+			FastWriteRtOnlyFast(magic, unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, randomAv, false)
 		} else if mode == 2 {
 			// 只写普通
-			FastWriteRtOnlyNormal(magic, unitNumber, normalAnalogCsvPath, normalDigitalCsvPath, randomAv)
+			FastWriteRtOnlyNormal(magic, unitNumber, normalAnalogCsvPath, normalDigitalCsvPath, randomAv, false)
 		} else {
 			panic("mode must be 0 or 1 or 2")
 		}
@@ -2070,6 +2126,7 @@ func init() {
 	rtFastWrite.Flags().BoolP("random_av", "", false, "为true表示给av值加一个[0,30]的随机数浮动")
 	rtFastWrite.Flags().Int32P("magic", "", 0, "魔数, 默认为0")
 	rtFastWrite.Flags().Int64("mode", 0, "写入模式: 0表示写快采点+普通点, 1表示只写快采点, 2表示只写普通点")
+	rtFastWrite.Flags().BoolP("parallel_writing", "", false, "为true时, 块采点和普通点会分别由两个协程进行并行写入")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
