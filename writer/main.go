@@ -65,6 +65,7 @@ func DurationListToFloatList(durationList []time.Duration) []float64 {
 }
 
 func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
+	fmt.Println("section: ", len(analogList), len(digitalList))
 	infoList := make([]WriteSectionInfo, 0)
 
 	for _, info := range analogList {
@@ -892,55 +893,55 @@ func FastWriteRealtimeSection(magic int32, unitNumber int64, closeChan chan stru
 }
 
 // FastWriteHisSection 极速写入历史断面
-func FastWriteHisSection(magic int32, unitNumber int64, closeChan chan struct{}, analogCh chan AnalogSection, digitalCh chan DigitalSection, exitCh chan bool, randomAv bool) {
-	closeNum := 0
+func FastWriteHisSection(magic int32, unitNumber int64, closeChan chan struct{}, sectionCh chan Section, exitCh chan bool, randomAv bool) {
 	for {
-		if len(exitCh) != 0 {
-			if len(analogCh) != 0 {
-				for i := 0; i < len(analogCh); i++ {
-					<-analogCh
-				}
-			}
-			if len(digitalCh) != 0 {
-				for i := 0; i < len(digitalCh); i++ {
-					<-digitalCh
-				}
-			}
-			return
-		}
-
 		select {
-		case section := <-analogCh:
-			wt := time.Now()
-			GlobalPlugin.WriteHisAnalog(magic, unitNumber, section, randomAv)
+		case <-exitCh:
+			for {
+				if len(closeChan) == 1 {
+					if len(sectionCh) != 0 {
+						for i := 0; i < len(sectionCh); i++ {
+							<-sectionCh
+						}
+					}
+					return
+				} else {
+					if len(sectionCh) != 0 {
+						for i := 0; i < len(sectionCh); i++ {
+							<-sectionCh
+						}
+					}
+				}
+				time.Sleep(time.Millisecond)
+			}
+		case section := <-sectionCh:
+			wt1 := time.Now()
+			GlobalPlugin.WriteHisAnalog(magic, unitNumber, section.analog, randomAv)
+			wt2 := time.Now()
+			GlobalPlugin.WriteHisDigital(magic, unitNumber, section.digital)
+			wt3 := time.Now()
 			NormalAnalogWriteSectionInfoList = append(NormalAnalogWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.analog.Time,
+				Duration:     wt2.Sub(wt1),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.analog.Data)),
 			})
-		case section := <-digitalCh:
-			wt := time.Now()
-			GlobalPlugin.WriteHisDigital(magic, unitNumber, section)
 			NormalDigitalWriteSectionInfoList = append(NormalDigitalWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.digital.Time,
+				Duration:     wt3.Sub(wt2),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.digital.Data)),
 			})
-		case <-closeChan:
-			closeNum++
 		}
 
-		if closeNum == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
+		if len(closeChan) == 1 && len(sectionCh) == 0 {
 			break
 		}
 	}
 	close(closeChan)
-	close(analogCh)
-	close(digitalCh)
+	close(sectionCh)
 }
 
 // AsyncPeriodicWriteSection 周期性写入断面(实时/历史通用)
@@ -1481,26 +1482,22 @@ func FastWriteHis(magic int32, unitNumber int64, analogCsvPath string, digitalCs
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
 	rd1 := make(chan bool, 1)
-	rd2 := make(chan bool, 1)
 	go func() {
 		_ = <-sigs
 		done <- true
 		rd1 <- true
-		rd2 <- true
 	}()
 
 	closeCh := make(chan struct{}, 4)
-	analogCh := make(chan AnalogSection, CacheSize)
-	digitalCh := make(chan DigitalSection, CacheSize)
+	sectionCh := make(chan Section, CacheSize)
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
-	go ReadAnalogCsv(wg, closeCh, analogCsvPath, analogCh, rd1)
-	go ReadDigitalCsv(wg, closeCh, digitalCsvPath, digitalCh, rd2)
+	wg.Add(1)
+	go ReadCsv(wg, closeCh, analogCsvPath, digitalCsvPath, sectionCh, rd1)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
 	start := time.Now()
-	FastWriteHisSection(magic, unitNumber, closeCh, analogCh, digitalCh, done, randomAv)
+	FastWriteHisSection(magic, unitNumber, closeCh, sectionCh, done, randomAv)
 	wg.Wait()
 	end := time.Now()
 
