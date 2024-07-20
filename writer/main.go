@@ -226,6 +226,11 @@ func PeriodicWriteRtSummary(
 	}
 }
 
+type Section struct {
+	analog  AnalogSection
+	digital DigitalSection
+}
+
 type AnalogSection struct {
 	Time int64
 	Data []C.Analog
@@ -559,6 +564,42 @@ func ParseStaticDigitalRecord(record []string) (C.StaticDigital, error) {
 	return staticDigital, nil
 }
 
+func ReadCsv(wg2 *sync.WaitGroup, closeCh2 chan struct{}, analogFilePath string, digitalFilePath string, sectionCh chan Section, exitCh chan bool) {
+	defer wg2.Done()
+
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		<-exitCh
+		rd1 <- true
+		rd2 <- true
+		log.Println("ReadCsv 收到平滑退出信号")
+	}()
+
+	closeCh := make(chan struct{}, 2)
+	analogCh := make(chan AnalogSection, CacheSize)
+	digitalCh := make(chan DigitalSection, CacheSize)
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	go ReadAnalogCsv(wg, closeCh, analogFilePath, analogCh, rd1)
+	go ReadDigitalCsv(wg, closeCh, digitalFilePath, digitalCh, rd2)
+
+	for {
+		if len(closeCh) == 2 && (len(analogCh) == 0 || len(digitalCh) == 0) {
+			break
+		}
+
+		analogSection := <-analogCh
+		digitalSection := <-digitalCh
+		sectionCh <- Section{
+			analog:  analogSection,
+			digital: digitalSection,
+		}
+	}
+	wg.Wait()
+	closeCh2 <- struct{}{}
+}
+
 // ReadAnalogCsv 读取CSV文件, 将其转换成 C.Analog 结构后发送到缓存队列
 func ReadAnalogCsv(wg *sync.WaitGroup, closeCh chan struct{}, filepath string, ch chan AnalogSection, exitCh chan bool) {
 	defer wg.Done()
@@ -765,86 +806,89 @@ func ReadStaticDigitalCsv(filepath string) StaticDigitalSection {
 }
 
 // FastWriteRealtimeSection 极速写入实时断面
-func FastWriteRealtimeSection(magic int32, unitNumber int64, closeChan chan struct{}, fastAnalogCh chan AnalogSection, fastDigitalCh chan DigitalSection, normalAnalogCh chan AnalogSection, normalDigitalCh chan DigitalSection, exitCh chan bool, randomAv bool) {
-	closeNum := 0
-
+func FastWriteRealtimeSection(magic int32, unitNumber int64, closeChan chan struct{}, fastSectionCh chan Section, normalSectionCh chan Section, exitCh chan bool, randomAv bool) {
 	for {
 		select {
 		case <-exitCh:
-			if len(fastAnalogCh) != 0 {
-				for i := 0; i < len(fastAnalogCh); i++ {
-					<-fastAnalogCh
+			for {
+				if len(closeChan) == 2 {
+					if len(fastSectionCh) != 0 {
+						for i := 0; i < len(fastSectionCh); i++ {
+							<-fastSectionCh
+						}
+					}
+					if len(normalSectionCh) != 0 {
+						for i := 0; i < len(normalSectionCh); i++ {
+							<-normalSectionCh
+						}
+					}
+					return
+				} else {
+					if len(fastSectionCh) != 0 {
+						for i := 0; i < len(fastSectionCh); i++ {
+							<-fastSectionCh
+						}
+					}
+					if len(normalSectionCh) != 0 {
+						for i := 0; i < len(normalSectionCh); i++ {
+							<-normalSectionCh
+						}
+					}
 				}
+				time.Sleep(time.Millisecond)
 			}
-			if len(fastDigitalCh) != 0 {
-				for i := 0; i < len(fastDigitalCh); i++ {
-					<-fastDigitalCh
-				}
-			}
-			if len(normalAnalogCh) != 0 {
-				for i := 0; i < len(normalAnalogCh); i++ {
-					<-normalAnalogCh
-				}
-			}
-			if len(normalDigitalCh) != 0 {
-				for i := 0; i < len(normalDigitalCh); i++ {
-					<-normalDigitalCh
-				}
-			}
-			return
-		case section := <-fastAnalogCh:
-			wt := time.Now()
-			GlobalPlugin.WriteRtAnalog(magic, unitNumber, section, true, randomAv)
+		case section := <-fastSectionCh:
+			wt1 := time.Now()
+			GlobalPlugin.WriteRtAnalog(magic, unitNumber, section.analog, true, randomAv)
+			wt2 := time.Now()
+			GlobalPlugin.WriteRtDigital(magic, unitNumber, section.digital, true)
+			wt3 := time.Now()
+
 			FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.analog.Time,
+				Duration:     wt2.Sub(wt1),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.analog.Data)),
 			})
-		case section := <-fastDigitalCh:
-			wt := time.Now()
-			GlobalPlugin.WriteRtDigital(magic, unitNumber, section, true)
 			FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.digital.Time,
+				Duration:     wt3.Sub(wt2),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.digital.Data)),
 			})
-		case section := <-normalAnalogCh:
-			wt := time.Now()
-			GlobalPlugin.WriteRtAnalog(magic, unitNumber, section, false, randomAv)
+		case section := <-normalSectionCh:
+			wt1 := time.Now()
+			GlobalPlugin.WriteRtAnalog(magic, unitNumber, section.analog, false, randomAv)
+			wt2 := time.Now()
+			GlobalPlugin.WriteRtDigital(magic, unitNumber, section.digital, false)
+			wt3 := time.Now()
+
 			NormalAnalogWriteSectionInfoList = append(NormalAnalogWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.analog.Time,
+				Duration:     wt2.Sub(wt1),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.analog.Data)),
 			})
-		case section := <-normalDigitalCh:
-			wt := time.Now()
-			GlobalPlugin.WriteRtDigital(magic, unitNumber, section, false)
 			NormalDigitalWriteSectionInfoList = append(NormalDigitalWriteSectionInfoList, WriteSectionInfo{
 				UnitNumber:   unitNumber,
-				Time:         section.Time,
-				Duration:     time.Now().Sub(wt),
+				Time:         section.digital.Time,
+				Duration:     wt3.Sub(wt2),
 				SectionCount: 1,
-				PNumCount:    int64(len(section.Data)),
+				PNumCount:    int64(len(section.digital.Data)),
 			})
-		case <-closeChan:
-			closeNum++
 		}
 
-		if closeNum == 4 && len(fastAnalogCh) == 0 && len(fastDigitalCh) == 0 && len(normalAnalogCh) == 0 && len(normalDigitalCh) == 0 {
+		// 循环退出条件
+		if len(closeChan) == 2 && len(fastSectionCh) == 0 && len(normalSectionCh) == 0 {
 			break
 		}
 	}
 	close(closeChan)
-	close(fastAnalogCh)
-	close(fastDigitalCh)
-	close(normalAnalogCh)
-	close(normalDigitalCh)
+	close(fastSectionCh)
+	close(normalSectionCh)
 }
 
 // FastWriteHisSection 极速写入历史断面
@@ -1142,40 +1186,33 @@ func FastWriteRtOnlyFast(magic int32, unitNumber int64, fastAnalogCsvPath string
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
 	rd1 := make(chan bool, 1)
-	rd2 := make(chan bool, 1)
 	go func() {
 		_ = <-sigs
 		log.Println("捕获中断信号, 进行平滑退出处理")
 		done <- true
 		rd1 <- true
-		rd2 <- true
 		log.Println("平滑退出信号发送完成")
 	}()
 
-	closeCh := make(chan struct{}, 4)
-	fastAnalogCh := make(chan AnalogSection, CacheSize)
-	fastDigitalCh := make(chan DigitalSection, CacheSize)
-	normalAnalogCh := make(chan AnalogSection, CacheSize)
-	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	closeCh := make(chan struct{}, 2)
+	fastSectionCh := make(chan Section, CacheSize)
+	normalSectionCh := make(chan Section, CacheSize)
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
-	closeCh <- struct{}{}
+	wg.Add(2)
 	closeCh <- struct{}{}
 	wg.Done()
-	wg.Done()
-	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh, rd1)
-	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+	go ReadCsv(wg, closeCh, fastAnalogCsvPath, fastDigitalCsvPath, fastSectionCh, rd1)
 
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2 * time.Second)
 
 	start := time.Now()
-	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done, randomAv)
+	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastSectionCh, normalSectionCh, done, randomAv)
 	wg.Wait()
 	end := time.Now()
 
 	if !parallelWriting {
-		RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+		RtFastWriteSummary(magic, "极速写入实时值(只写快采点)", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 	}
 }
 
@@ -1185,39 +1222,32 @@ func FastWriteRtOnlyNormal(magic int32, unitNumber int64, normalAnalogCsvPath st
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
 	rd1 := make(chan bool, 1)
-	rd2 := make(chan bool, 1)
 	go func() {
 		_ = <-sigs
 		log.Println("捕获中断信号, 进行平滑退出处理")
 		done <- true
 		rd1 <- true
-		rd2 <- true
 		log.Println("平滑退出信号发送完成")
 	}()
 
-	closeCh := make(chan struct{}, 4)
-	fastAnalogCh := make(chan AnalogSection, CacheSize)
-	fastDigitalCh := make(chan DigitalSection, CacheSize)
-	normalAnalogCh := make(chan AnalogSection, CacheSize)
-	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	closeCh := make(chan struct{}, 2)
+	fastSectionCh := make(chan Section, CacheSize)
+	normalSectionCh := make(chan Section, CacheSize)
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
-	wg.Done()
+	wg.Add(2)
 	wg.Done()
 	closeCh <- struct{}{}
-	closeCh <- struct{}{}
-	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh, rd1)
-	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh, rd2)
+	go ReadCsv(wg, closeCh, normalAnalogCsvPath, normalDigitalCsvPath, normalSectionCh, rd1)
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2 * time.Second)
 
 	start := time.Now()
-	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done, randomAv)
+	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastSectionCh, normalSectionCh, done, randomAv)
 	wg.Wait()
 	end := time.Now()
 
 	if !parallelWriting {
-		RtFastWriteSummary(magic, "极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+		RtFastWriteSummary(magic, "极速写入实时值(只写普通点)", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 	}
 }
 
@@ -1247,35 +1277,27 @@ func FastWriteRt(magic int32, unitNumber int64, fastAnalogCsvPath string, fastDi
 	done := make(chan bool, 1)
 	rd1 := make(chan bool, 1)
 	rd2 := make(chan bool, 1)
-	rd3 := make(chan bool, 1)
-	rd4 := make(chan bool, 1)
 	go func() {
 		_ = <-sigs
 		log.Println("捕获中断信号, 进行平滑退出处理")
 		done <- true
 		rd1 <- true
 		rd2 <- true
-		rd3 <- true
-		rd4 <- true
 		log.Println("平滑退出信号发送完成")
 	}()
 
-	closeCh := make(chan struct{}, 4)
-	fastAnalogCh := make(chan AnalogSection, CacheSize)
-	fastDigitalCh := make(chan DigitalSection, CacheSize)
-	normalAnalogCh := make(chan AnalogSection, CacheSize)
-	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	closeCh := make(chan struct{}, 2)
+	fastSectionCh := make(chan Section, CacheSize)
+	normalSectionCh := make(chan Section, CacheSize)
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
-	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh, rd1)
-	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh, rd2)
-	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh, rd3)
-	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh, rd4)
+	wg.Add(2)
+	go ReadCsv(wg, closeCh, fastAnalogCsvPath, fastDigitalCsvPath, fastSectionCh, rd1)
+	go ReadCsv(wg, closeCh, normalAnalogCsvPath, normalDigitalCsvPath, normalSectionCh, rd2)
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2 * time.Second)
 
 	start := time.Now()
-	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done, randomAv)
+	FastWriteRealtimeSection(magic, unitNumber, closeCh, fastSectionCh, normalSectionCh, done, randomAv)
 	wg.Wait()
 	end := time.Now()
 
@@ -1930,7 +1952,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v1.0.0")
+		fmt.Println("v1.0.1")
 	},
 }
 
