@@ -65,7 +65,6 @@ func DurationListToFloatList(durationList []time.Duration) []float64 {
 }
 
 func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
-	fmt.Println("section: ", len(analogList), len(digitalList))
 	infoList := make([]WriteSectionInfo, 0)
 
 	for _, info := range analogList {
@@ -1952,7 +1951,11 @@ var staticWrite = &cobra.Command{
 			log.Println("登陆失败: ", rtn)
 			return
 		}
-		defer GlobalPlugin.Logout()
+		defer func() {
+			st := time.Now()
+			GlobalPlugin.Logout()
+			log.Println("logout time: ", time.Since(st))
+		}()
 
 		// 静态写入
 		StaticWrite(magic, unitNumber, staticAnalogCsvPath, staticDigitalCsvPath, typ)
@@ -1983,7 +1986,11 @@ var rtFastWrite = &cobra.Command{
 			log.Println("登陆失败: ", rtn)
 			return
 		}
-		defer GlobalPlugin.Logout()
+		defer func() {
+			st := time.Now()
+			GlobalPlugin.Logout()
+			log.Println("logout time: ", time.Since(st))
+		}()
 
 		// 极速写入实时值
 		if mode == 0 {
@@ -2025,7 +2032,11 @@ var hisFastWrite = &cobra.Command{
 			log.Println("登陆失败: ", rtn)
 			return
 		}
-		defer GlobalPlugin.Logout()
+		defer func() {
+			st := time.Now()
+			GlobalPlugin.Logout()
+			log.Println("logout time: ", time.Since(st))
+		}()
 
 		// 极速写入历史
 		FastWriteHis(magic, unitNumber, analogCsvPath, digitalCsvPath, randomAv)
@@ -2052,7 +2063,11 @@ var hisPeriodicWrite = &cobra.Command{
 			log.Println("登陆失败: ", rtn)
 			return
 		}
-		defer GlobalPlugin.Logout()
+		defer func() {
+			st := time.Now()
+			GlobalPlugin.Logout()
+			log.Println("logout time: ", time.Since(st))
+		}()
 
 		// 周期性写入
 		PeriodicWriteHis(magic, unitNumber, analogCsvPath, digitalCsvPath, randomAv)
@@ -2084,7 +2099,11 @@ var rtPeriodicWrite = &cobra.Command{
 			log.Println("登陆失败: ", rtn)
 			return
 		}
-		defer GlobalPlugin.Logout()
+		defer func() {
+			st := time.Now()
+			GlobalPlugin.Logout()
+			log.Println("logout time: ", time.Since(st))
+		}()
 
 		// 周期性写入
 		if mode == 0 {
