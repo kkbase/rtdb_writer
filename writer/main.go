@@ -65,23 +65,25 @@ func DurationListToFloatList(durationList []time.Duration) []float64 {
 }
 
 func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
-	infoList := make([]WriteSectionInfo, 0)
-
-	for _, info := range analogList {
-		infoList = append(infoList, WriteSectionInfo{
+	infoLen := len(analogList)
+	if len(digitalList) > infoLen {
+		infoLen = len(digitalList)
+	}
+	infoList := make([]WriteSectionInfo, infoLen)
+	fmt.Println(infoLen, analogList[0], analogList[len(analogList)-1])
+	for i, info := range analogList {
+		infoList[i] = WriteSectionInfo{
 			Duration:     info.Duration,
 			SectionCount: info.SectionCount,
 			PNumCount:    info.PNumCount,
 			Time:         info.Time,
 			UnitNumber:   info.UnitNumber,
-		})
+		}
 	}
 
 	for i, info := range digitalList {
-		if i < len(infoList) {
-			infoList[i].Duration += info.Duration
-			infoList[i].PNumCount += info.PNumCount
-		}
+		infoList[i].Duration += info.Duration
+		infoList[i].PNumCount += info.PNumCount
 	}
 
 	allDuration := time.Duration(0)
@@ -592,15 +594,16 @@ func ReadCsv(wg2 *sync.WaitGroup, analogFilePath string, digitalFilePath string,
 	for {
 		analogSection, ok1 := <-analogCh
 		digitalSection, ok2 := <-digitalCh
+
+		if !ok1 && !ok2 {
+			break
+		}
+
 		sectionCh <- Section{
 			analogOk:  ok1,
 			analog:    analogSection,
 			digitalOk: ok2,
 			digital:   digitalSection,
-		}
-
-		if !ok1 && !ok2 {
-			break
 		}
 	}
 	wg.Wait()
@@ -1005,6 +1008,7 @@ func AsyncPeriodicWriteSection(
 						break
 					}
 				}
+
 				t1 := time.Now()
 				GlobalPlugin.WriteRtAnalogList(magic, unitNumber, analogList, randomAv)
 				t2 := time.Now()
