@@ -1527,11 +1527,15 @@ func NewWritePlugin(path string) *WritePlugin {
 
 func (df *WritePlugin) Login(param string) int {
 	if param == "" {
-		return int(C.dy_login(df.handle, nil))
+		rtn := C.dy_login(df.handle, nil)
+		fmt.Println("debug: go call C login rtn? :", rtn)
+		return int(rtn)
 	} else {
 		cParam := C.CString(param)
 		defer C.free(unsafe.Pointer(cParam))
-		return int(C.dy_login(df.handle, cParam))
+		rtn := C.dy_login(df.handle, cParam)
+		fmt.Println("debug: go call C login rtn? :", rtn)
+		return int(rtn)
 	}
 }
 
