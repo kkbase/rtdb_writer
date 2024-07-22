@@ -2,6 +2,7 @@
 #define _C_PLUGIN_H_
 
 #include "write_plugin.h"
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,7 +37,9 @@ int close_library(DYLIB_HANDLE  handle) {
 
 int dy_login(DYLIB_HANDLE handle, char* param) {
     int (*login)(char*) = (int (*)(char*)) GET_FUNCTION(handle.handle, "login");
-    return login(param);
+    int rtn = login(param);
+    printf("debug: c Call Plugin rtn: %d\n", rtn);
+    return rtn;
 }
 
 void dy_logout(DYLIB_HANDLE handle) {
