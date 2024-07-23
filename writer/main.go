@@ -1918,7 +1918,7 @@ var rtFastWrite = &cobra.Command{
 			log.Println("logout time: ", logoutDuration)
 			if mode == 0 {
 				if parallelWriting {
-					ParallelRtFastWriteSummary(magic, "极速写入实时值(块采点,普通点并行)", start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, logoutDuration)
+					ParallelRtFastWriteSummary(magic, "极速写入实时值(快采点,普通点并行)", start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, logoutDuration)
 				} else {
 					RtFastWriteSummary(magic, "极速写入实时值(快采点,普通点串行)", start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, logoutDuration)
 				}
@@ -2111,7 +2111,7 @@ func init() {
 	rtFastWrite.Flags().BoolP("random_av", "", false, "为true表示给av值加一个[0,30]的随机数浮动")
 	rtFastWrite.Flags().Int32P("magic", "", 0, "魔数, 默认为0")
 	rtFastWrite.Flags().Int64("mode", 0, "写入模式: 0表示写快采点+普通点, 1表示只写快采点, 2表示只写普通点")
-	rtFastWrite.Flags().BoolP("parallel_writing", "", false, "为true时, 块采点和普通点会分别由两个协程进行并行写入")
+	rtFastWrite.Flags().BoolP("parallel_writing", "", false, "为true时, 快采点和普通点会分别由两个协程进行并行写入")
 
 	rootCmd.AddCommand(rtPeriodicWrite)
 	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
