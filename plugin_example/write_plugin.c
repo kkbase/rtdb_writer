@@ -51,9 +51,6 @@ void write_rt_analog(int32_t magic, int64_t unit_id, int64_t time, Analog *analo
             }
         }
     }
-    for (int i=0; i<10000000; i++) {
-        sum++;
-    }
 }
 
 // 写实时数字量
@@ -113,10 +110,6 @@ void write_his_analog(int32_t magic, int64_t unit_id, int64_t time, Analog *anal
                 break;
             }
         }
-    }
-
-    for (int i=0; i<10000000; i++) {
-        sum++;
     }
 }
 
