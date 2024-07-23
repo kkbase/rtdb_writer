@@ -70,7 +70,6 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 		infoLen = len(digitalList)
 	}
 	infoList := make([]WriteSectionInfo, infoLen)
-	fmt.Println(infoLen, analogList[0], analogList[len(analogList)-1])
 	for i, info := range analogList {
 		infoList[i] = WriteSectionInfo{
 			Duration:     info.Duration,
@@ -1373,11 +1372,9 @@ func PeriodicWriteRt(magic int32, unitNumber int64, overloadProtectionFlag bool,
 	go ReadCsv(wgRead, fastAnalogCsvPath, fastDigitalCsvPath, fastSectionCh, rd1)
 	go ReadCsv(wgRead, normalAnalogCsvPath, normalDigitalCsvPath, normalSectionCh, rd2)
 
-	fmt.Println("???????11111")
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
 	wgWrite := new(sync.WaitGroup)
-	fmt.Println("???????22222")
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastSectionCh, true, true, fastCache, done1, randomAv)
@@ -1386,9 +1383,7 @@ func PeriodicWriteRt(magic int32, unitNumber int64, overloadProtectionFlag bool,
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastSectionCh, true, true, fastCache, done1, randomAv)
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalSectionCh, true, false, false, done2, randomAv)
 	}
-	fmt.Println("???????3333")
 	wgWrite.Wait()
-	fmt.Println("???????44444")
 	wgRead.Wait()
 }
 
@@ -1852,7 +1847,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v1.0.2")
+		fmt.Println("v1.0.3")
 	},
 }
 
