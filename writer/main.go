@@ -1009,39 +1009,42 @@ func AsyncPeriodicWriteSection(
 					}
 				}
 
-				t1 := time.Now()
-				GlobalPlugin.WriteRtAnalogList(magic, unitNumber, analogList, randomAv)
-				t2 := time.Now()
-				GlobalPlugin.WriteRtDigitalList(magic, unitNumber, digitalList)
-				t3 := time.Now()
-				duration := t3.Sub(t1)
+				duration := time.Duration(0)
+				if len(analogList) != 0 || len(digitalList) != 0 {
+					t1 := time.Now()
+					GlobalPlugin.WriteRtAnalogList(magic, unitNumber, analogList, randomAv)
+					t2 := time.Now()
+					GlobalPlugin.WriteRtDigitalList(magic, unitNumber, digitalList)
+					t3 := time.Now()
+					duration = t3.Sub(t1)
 
-				aPCount := 0
-				for _, analog := range analogList {
-					aPCount = aPCount + len(analog.Data)
+					aPCount := 0
+					for _, analog := range analogList {
+						aPCount = aPCount + len(analog.Data)
+					}
+					dPCount := 0
+					for _, digital := range digitalList {
+						dPCount = dPCount + len(digital.Data)
+					}
+					FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
+						UnitNumber:   unitNumber,
+						Time:         analogList[0].Time,
+						Duration:     t2.Sub(t1),
+						SectionCount: int64(len(analogList)),
+						PNumCount:    int64(aPCount),
+					})
+					FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
+						UnitNumber:   unitNumber,
+						Time:         analogList[0].Time,
+						Duration:     t3.Sub(t2),
+						SectionCount: int64(len(digitalList)),
+						PNumCount:    int64(dPCount),
+					})
 				}
-				dPCount := 0
-				for _, digital := range digitalList {
-					dPCount = dPCount + len(digital.Data)
-				}
-				FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
-					UnitNumber:   unitNumber,
-					Time:         analogList[0].Time,
-					Duration:     t2.Sub(t1),
-					SectionCount: int64(len(analogList)),
-					PNumCount:    int64(aPCount),
-				})
-				FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
-					UnitNumber:   unitNumber,
-					Time:         analogList[0].Time,
-					Duration:     t3.Sub(t2),
-					SectionCount: int64(len(digitalList)),
-					PNumCount:    int64(dPCount),
-				})
 
 				// 全部写完, 退出循环
 				if isEOF {
-					break
+					return
 				}
 
 				// 睡眠
@@ -1059,7 +1062,7 @@ func AsyncPeriodicWriteSection(
 				start := time.Now()
 				section, ok := <-sectionCh
 				if !ok {
-					break
+					return
 				}
 				if isRt {
 					wt1 := time.Now()
@@ -1370,9 +1373,11 @@ func PeriodicWriteRt(magic int32, unitNumber int64, overloadProtectionFlag bool,
 	go ReadCsv(wgRead, fastAnalogCsvPath, fastDigitalCsvPath, fastSectionCh, rd1)
 	go ReadCsv(wgRead, normalAnalogCsvPath, normalDigitalCsvPath, normalSectionCh, rd2)
 
+	fmt.Println("???????11111")
 	// 睡眠2秒, 等待协程加载缓存
 	time.Sleep(2000 * time.Millisecond)
 	wgWrite := new(sync.WaitGroup)
+	fmt.Println("???????22222")
 	wgWrite.Add(2)
 	if overloadProtectionFlag {
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastSectionCh, true, true, fastCache, done1, randomAv)
@@ -1381,7 +1386,9 @@ func PeriodicWriteRt(magic int32, unitNumber int64, overloadProtectionFlag bool,
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastSectionCh, true, true, fastCache, done1, randomAv)
 		go AsyncPeriodicWriteSection(magic, unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalSectionCh, true, false, false, done2, randomAv)
 	}
+	fmt.Println("???????3333")
 	wgWrite.Wait()
+	fmt.Println("???????44444")
 	wgRead.Wait()
 }
 
