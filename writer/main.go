@@ -1476,31 +1476,53 @@ func GlobalID(magic int32, unitId int64, isAnalog bool, isFast bool, isRt bool, 
 }
 
 func InitAnalogGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section AnalogSection) AnalogSection {
-	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
+	ss := AnalogSection{
+		Time: section.Time,
+		Data: make([]C.Analog, 0),
 	}
-	return section
+	for i := 0; i < len(section.Data); i++ {
+		s := section.Data[i]
+		s.global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
+		ss.Data = append(ss.Data, s)
+	}
+	return ss
 }
 
 func InitDigitalGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section DigitalSection) DigitalSection {
-	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
+	ss := DigitalSection{
+		Time: section.Time,
+		Data: make([]C.Digital, 0),
 	}
-	return section
+	for i := 0; i < len(section.Data); i++ {
+		s := section.Data[i]
+		s.global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
+		ss.Data = append(ss.Data, s)
+	}
+	return ss
 }
 
 func InitStaticAnalogGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section StaticAnalogSection) StaticAnalogSection {
-	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
+	ss := StaticAnalogSection{
+		Data: make([]C.StaticAnalog, 0),
 	}
-	return section
+	for i := 0; i < len(section.Data); i++ {
+		s := section.Data[i]
+		s.global_id = C.int64_t(GlobalID(magic, unitId, true, isFast, isRt, int32(section.Data[i].p_num)))
+		ss.Data = append(ss.Data, s)
+	}
+	return ss
 }
 
 func InitStaticDigitalGlobalID(magic int32, unitId int64, isFast bool, isRt bool, section StaticDigitalSection) StaticDigitalSection {
-	for i := 0; i < len(section.Data); i++ {
-		section.Data[i].global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
+	ss := StaticDigitalSection{
+		Data: make([]C.StaticDigital, 0),
 	}
-	return section
+	for i := 0; i < len(section.Data); i++ {
+		s := section.Data[i]
+		s.global_id = C.int64_t(GlobalID(magic, unitId, false, isFast, isRt, int32(section.Data[i].p_num)))
+		ss.Data = append(ss.Data, s)
+	}
+	return ss
 }
 
 // WritePlugin 写入插件
