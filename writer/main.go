@@ -1873,7 +1873,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v2.0.0")
+		fmt.Println("v2.0.1")
 	},
 }
 
