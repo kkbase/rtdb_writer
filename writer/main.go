@@ -1672,14 +1672,15 @@ func (df *WritePlugin) SyncWriteRtDigital(magic int32, unitId int64, section Dig
 	C.dy_write_rt_digital(df.handle, C.int32_t(magic), C.int64_t(unitId), C.int64_t(section.Time), (*C.Digital)(&section.Data[0]), C.int64_t(len(section.Data)), C.bool(isFast))
 }
 
-func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, sections []AnalogSection, randomAv bool) {
+func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, oldSections []AnalogSection, randomAv bool) {
+	sections := make([]AnalogSection, 0)
+	for i := 0; i < len(oldSections); i++ {
+		sections = append(sections, InitAnalogGlobalID(magic, unitId, true, true, oldSections[i]))
+	}
 	if randomAv {
 		for i := 0; i < len(sections); i++ {
 			sections[i] = RandAnalogSection(sections[i])
 		}
-	}
-	for i := 0; i < len(sections); i++ {
-		sections[i] = InitAnalogGlobalID(magic, unitId, true, true, sections[i])
 	}
 
 	// 初始化 C 数组
@@ -1713,9 +1714,10 @@ func (df *WritePlugin) SyncWriteRtAnalogList(magic int32, unitId int64, sections
 	}
 }
 
-func (df *WritePlugin) SyncWriteRtDigitalList(magic int32, unitId int64, sections []DigitalSection) {
-	for i := 0; i < len(sections); i++ {
-		sections[i] = InitDigitalGlobalID(magic, unitId, true, true, sections[i])
+func (df *WritePlugin) SyncWriteRtDigitalList(magic int32, unitId int64, oldSections []DigitalSection) {
+	sections := make([]DigitalSection, 0)
+	for i := 0; i < len(oldSections); i++ {
+		sections = append(sections, InitDigitalGlobalID(magic, unitId, true, true, oldSections[i]))
 	}
 
 	// 初始化 C 数组
@@ -1873,7 +1875,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v2.0.1")
+		fmt.Println("v2.0.2")
 	},
 }
 
