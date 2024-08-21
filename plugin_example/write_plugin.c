@@ -91,6 +91,12 @@ void write_rt_digital(int32_t magic, int64_t unit_id, int64_t time, Digital *dig
 // 写实时模拟量
 void write_rt_analog_list(int32_t magic, int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count) {
     printf("write rt analog: unit_id: %lld, section count: %lld\n", unit_id, count);
+
+    for (int64_t i=0; i<count; i++) {
+        if (analog_array_array_ptr[i]->global_id == 42964353025) {
+            printf("----> %lld, %lld", unit_id, analog_array_array_ptr[i]->global_id);
+        }
+    }
 }
 
 // 写实时数字量
