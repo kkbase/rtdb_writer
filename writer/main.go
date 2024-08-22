@@ -64,7 +64,7 @@ func DurationListToFloatList(durationList []time.Duration) []float64 {
 	return rtn
 }
 
-func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
+func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo, fastCache bool) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
 	infoLen := len(analogList)
 	if len(digitalList) > infoLen {
 		infoLen = len(digitalList)
@@ -106,6 +106,14 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 	dP95 := time.Duration(stat.Quantile(0.95, stat.Empirical, DurationListToFloatList(durationList), nil))
 	dP50 := time.Duration(stat.Quantile(0.50, stat.Empirical, DurationListToFloatList(durationList), nil))
 
+	if fastCache {
+		dMax /= 100
+		dMin /= 100
+		dP99 /= 100
+		dP95 /= 100
+		dP50 /= 100
+	}
+
 	return allDuration, sectionCount, dAvg, dMax, dMin, dP99, dP95, dP50, pnumCount
 }
 
@@ -121,7 +129,7 @@ func HisFastWriteSummary(
 ) {
 	log.Printf("MAGIC: %v, %v - 开始时间: %v, 结束时间: %v\n", magic, name, start.Format(time.RFC3339), end.Format(time.RFC3339))
 	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
-		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital, false)
 		log.Printf("总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v,\n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
 			nAll+logoutDuration, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
 		)
@@ -137,7 +145,7 @@ func ParallelRtFastWriteSummary(
 	log.Printf("MAGIC: %v, %v - 开始时间: %v, 结束时间: %v\n", magic, name, start.Format(time.RFC3339), end.Format(time.RFC3339))
 	allTime := time.Duration(0)
 	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
-		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital, false)
 		if allTime < fAll {
 			allTime = fAll
 		}
@@ -146,7 +154,7 @@ func ParallelRtFastWriteSummary(
 		)
 	}
 	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
-		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital, false)
 		if allTime < nAll {
 			allTime = nAll
 		}
@@ -167,14 +175,14 @@ func RtFastWriteSummary(
 	log.Printf("MAGIC: %v, %v - 开始时间: %v, 结束时间: %v\n", magic, name, start.Format(time.RFC3339), end.Format(time.RFC3339))
 	all := time.Duration(0)
 	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
-		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital, false)
 		log.Printf("快采点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
 			fAll, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
 		)
 		all += fAll
 	}
 	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
-		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital, false)
 		log.Printf("普通点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
 			nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
 		)
@@ -193,7 +201,7 @@ func PeriodicWriteHisSummary(
 		for _, d := range normalSleepList {
 			nSleepSum += d
 		}
-		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital, false)
 		log.Printf("总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
 			nAll+logoutDuration, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
 		)
@@ -204,12 +212,12 @@ func PeriodicWriteRtSummary(
 	magic int32, name string, start time.Time, end time.Time,
 	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo, fastSleepList []time.Duration,
 	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo, normalSleepList []time.Duration,
-	logoutDuration time.Duration,
+	logoutDuration time.Duration, fastCache bool,
 ) {
 	log.Printf("MAGIC: %v, %v - 开始时间: %v, 结束时间: %v\n", magic, name, start.Format(time.RFC3339), end.Format(time.RFC3339))
 
 	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
-		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital, fastCache)
 		fSleepSum := time.Duration(0)
 		for _, d := range fastSleepList {
 			fSleepSum += d
@@ -224,7 +232,7 @@ func PeriodicWriteRtSummary(
 		for _, d := range normalSleepList {
 			nSleepSum += d
 		}
-		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital, fastCache)
 		log.Printf("普通点 - 总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, \n\t\t平均耗时: %v ,最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
 			nAll+logoutDuration, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
 		)
@@ -2093,11 +2101,11 @@ var rtPeriodicWrite = &cobra.Command{
 			}
 
 			if mode == 0 {
-				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration)
+				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration, fastCache)
 			} else if mode == 1 {
-				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration)
+				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration, fastCache)
 			} else if mode == 2 {
-				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration)
+				PeriodicWriteRtSummary(magic, name, start, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList, logoutDuration, fastCache)
 			} else {
 				panic("mode must be 0 or 1 or 2")
 			}
